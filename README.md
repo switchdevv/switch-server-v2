@@ -7,7 +7,7 @@ switch-dashboard, switch-ops and switch-finance.
 
 **Status:** all 50 cloud functions, 11 triggers and the automatic-dispatch job are ported. The
 legacy parity harness (plan P1-7, Phase 2) is not built yet, so parity is still checked by
-hand-written tests. Deploys to staging from `main` once staging is set up
+hand-written tests. Deploys to staging from `stg` once staging is set up
 ([docs/05-staging.md](docs/05-staging.md)); never to production.
 
 Two rules come before everything else:
@@ -61,7 +61,7 @@ The full guide, seeded accounts and per-client setup are in
 | `pnpm seed:staging`                   | Seed the empty staging database (`SEED_PASSWORD`, 12+ characters)      |
 
 CI (`.github/workflows/ci.yml`, every pull request) runs install, typecheck, lint, format check,
-tests, build, `pnpm audit` (high) and gitleaks. Every push to `main` runs the same checks and then
+tests, build, `pnpm audit` (high) and gitleaks. Every push to `stg` runs the same checks and then
 deploys to staging (`.github/workflows/deploy-staging.yml`).
 
 ## Layout
@@ -109,7 +109,7 @@ secret arrives from the plain environment instead of Secret Manager.
 App Engine `nodejs24`. The build runs in CI; `.gcloudignore` uploads only `dist/`, the manifests
 and the non-secret env files, and App Engine installs the production dependencies with pnpm.
 
-- **Staging** (its own project): automatic from `main`. The tested build goes out as a new version
+- **Staging** (its own project): automatic from `stg` (`main` is reserved for production). The tested build goes out as a new version
   without traffic, takes the traffic after its `/health` and `/config` answer, and the newest five
   old versions stay for rollback. Setup and rollback: [docs/05-staging.md](docs/05-staging.md).
 - **Production** (same service as legacy): no workflow. A new version with `--no-promote`, then

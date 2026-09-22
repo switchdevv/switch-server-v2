@@ -14,16 +14,17 @@ project.
 ```mermaid
 flowchart LR
   PR[Pull request] --> CI["ci: typecheck · lint · format · tests · build · audit · gitleaks"]
-  M[Push to main<br/>or manual run] --> CI2[the same ci] --> D[deploy dist/ as a new<br/>App Engine version, no traffic]
+  M[Push to stg<br/>or manual run] --> CI2[the same ci] --> D[deploy dist/ as a new<br/>App Engine version, no traffic]
   D --> S[smoke test that version:<br/>/health and /config] --> T[move 100% traffic to it] --> C[delete old versions,<br/>keep the newest 5]
 ```
 
 - `.github/workflows/ci.yml` runs on every pull request.
-- `.github/workflows/deploy-staging.yml` runs on every push to `main` (and on demand). It runs the
+- `.github/workflows/deploy-staging.yml` runs on every push to `stg` (and on demand from `stg`). It runs the
   same checks, then deploys **the exact `dist/` they built and tested**. A version that fails its
   smoke test never gets traffic: staging keeps serving the previous one.
 - GitHub holds no Google key. The deploy job signs in with Workload Identity Federation, which Google
-  only accepts from this repository's `main` branch.
+  only accepts from this repository's `stg` branch. `main` is kept for production later; nothing
+  deploys from it today.
 - Before deploying, `tools/deploy/staging-preflight.ts` checks that `.env.staging` matches the
   staging project (URL, secret version, Pusher ids). A half-finished setup fails there with the
   value to set, not with a crash on App Engine.
@@ -214,7 +215,7 @@ the version and writes `SECRETS_VERSION=1` into `.env.staging`. Delete the Fireb
 
 ## Step 8. Deploy identity (Workload Identity Federation)
 
-A service account for GitHub, which Google only lets this repository's `main` branch use:
+A service account for GitHub, which Google only lets this repository's `stg` branch use:
 
 ```bash
 export PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')
@@ -226,7 +227,7 @@ gcloud iam workload-identity-pools providers create-oidc switch-server-v2 \
   --project="$PROJECT_ID" --location=global --workload-identity-pool=github \
   --display-name="switch-server-v2" --issuer-uri="https://token.actions.githubusercontent.com" \
   --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.ref=assertion.ref" \
-  --attribute-condition="assertion.repository == '$GITHUB_REPO' && assertion.ref == 'refs/heads/main'"
+  --attribute-condition="assertion.repository == '$GITHUB_REPO' && assertion.ref == 'refs/heads/stg'"
 
 gcloud iam service-accounts create github-deployer --project="$PROJECT_ID" \
   --display-name="GitHub deploys (switch-server-v2)"
@@ -273,8 +274,8 @@ pnpm staging:preflight --project "$PROJECT_ID"
 git add -A
 git status                         # .env.local must NOT be listed; .env.staging must be
 git commit -m "switch-server-v2 with CI and staging deploys"
-git branch -M main                 # the workflows watch `main`
-git push -u origin main
+git switch -c stg                  # the deploy workflow watches `stg`, not `main`
+git push -u origin stg
 gh run watch --repo "$GITHUB_REPO"
 ```
 
@@ -326,8 +327,8 @@ before anything else.
 
 | Task | How |
 |---|---|
-| Deploy | Merge or push to `main`. |
-| Redeploy without a change (e.g. after a secret) | Actions → deploy-staging → Run workflow on `main`, or `gh workflow run deploy-staging --repo "$GITHUB_REPO" --ref main`. |
+| Deploy | Merge or push to `stg` (pull requests into `stg`). |
+| Redeploy without a change (e.g. after a secret) | Actions → deploy-staging → Run workflow on `stg`, or `gh workflow run deploy-staging --repo "$GITHUB_REPO" --ref stg`. |
 | Change a secret | `pnpm staging:secret` (Enter keeps a value), commit `.env.staging`, push. Old versions stay enabled for rollback; disable them in Secret Manager once the new one is live. |
 | New master/maintenance keys | `pnpm staging:secret --new-keys` |
 | Roll back | `gcloud app versions list --service=default --project="$PROJECT_ID"`, then `gcloud app services set-traffic default --splits=<version>=1 --project="$PROJECT_ID"`. The 5 newest old versions are kept. Each version keeps its own pinned secret version. |
@@ -346,7 +347,7 @@ to testers' phones.
 | Symptom | Cause and fix |
 |---|---|
 | `Set these repository variables` | Step 9. |
-| auth step: `unauthorized_client` / rejected by the attribute condition | The run is not on `main`, or `$GITHUB_REPO` in the provider condition doesn't match the repository name (step 8). |
+| auth step: `unauthorized_client` / rejected by the attribute condition | The run is not on `stg`, or `$GITHUB_REPO` in the provider condition doesn't match the repository name (step 8). |
 | auth step: `iam.serviceAccounts.getAccessToken` denied | The `workloadIdentityUser` binding of step 8 is missing. New bindings can take a few minutes. |
 | Preflight errors | Each message names the `.env.staging` line and the value to set. Commit and push again. |
 | `gcloud app deploy`: permission denied, or Cloud Build fails at once | Deployer roles (step 8), the App Engine account's Editor role (step 1), or an API that isn't enabled (step 1). |

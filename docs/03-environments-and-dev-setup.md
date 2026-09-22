@@ -157,7 +157,7 @@ recipients; staging), or the real driver (production).
   Engine version) → traffic move. Old version disabled after the rollback window. Providers that
   allow two active keys (SendGrid, Firebase SA, Spaces, Maps, Pusher) rotate with zero
   downtime. In staging, `pnpm staging:secret` adds the version (after the boot checks) and bumps
-  `SECRETS_VERSION`; the push to `main` deploys it.
+  `SECRETS_VERSION`; the push to `stg` deploys it.
 - **Legacy's secrets:** everything in `configs.js` is compromised by definition (it is in git).
   It can only be rotated **after** legacy is retired (plan Phase 7), because legacy can't be
   redeployed with new values. Staging borrows some of them (`SHARED_PROD_CREDENTIALS`), so each
@@ -261,7 +261,7 @@ Set up and operated by [05-staging.md](05-staging.md) (step by step). In short:
   it borrows the production SendGrid, SMS Algérie, Maps and Spaces accounts, listed in
   `SHARED_PROD_CREDENTIALS` and each fenced by the guard: mail and SMS only reach
   `MAIL_ALLOWLIST` / `SMS_PHONE_ALLOWLIST`, files go to the `switchfood-staging` bucket.
-- **Deploy:** automatic from `main` (`.github/workflows/deploy-staging.yml`) with Workload Identity
+- **Deploy:** automatic from `stg` (`.github/workflows/deploy-staging.yml`) with Workload Identity
   Federation (no JSON keys): the ci checks, `gcloud app deploy app.staging.yaml --no-promote`, a
   smoke test of the new version, then the traffic move. A preflight
   (`tools/deploy/staging-preflight.ts`) first checks `.env.staging` against the project.
