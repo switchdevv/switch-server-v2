@@ -1,0 +1,59 @@
+{
+    "en": {
+        "messages": {
+            "canceled": "Order %s was canceled",
+            "canceledFromManager": "Order %s was canceled by",
+            "canceledFromDriver": "Order %s was canceled by the driver",
+            "canceledNoDriver": "Order %s was canceled because no driver is available, Please try again later.",
+            "canceledTo": "Order %s was canceled by the user",
+            "confirmed": "Order %s is Confirmed by",
+            "onTheWay": "Order %s is On The Way",
+            "prepared": "Order %s is Ready for Pickup",
+            "arrived": "Order %s has arrived",
+            "trackOrder": "Track Order",
+            "viewOrder": "View Order",
+            "newOrder": "New Order",
+            "reason": "Reason",
+            "noDriverActionRequired": "Order %s has no driver, Action required!",
+            "newMessage": "New message %i from: %s"
+        }
+    },
+    "fr": {
+        "messages": {
+            "canceled": "La commande %s a été annulée",
+            "canceledFromManager": "La commande %s a été annulée par",
+            "canceledFromDriver": "La commande %s a été annulée par le chauffeur",
+            "canceledNoDriver": "La commande %s a été annulée car aucun chauffeur n'est disponible, Veuillez réessayer plus tard.",
+            "canceledTo": "La commande %s a été annulée par l'utilisateur",
+            "confirmed": "La commande %s est confirmée par",
+            "onTheWay": "La commande %s est en route",
+            "prepared": "La commande %s est prête pour le ramassage",
+            "arrived": "La commande %s est arrivée",
+            "trackOrder": "Suivi",
+            "viewOrder": "Voir Plus",
+            "newOrder": "Nouvelle Commande",
+            "reason": "Raison",
+            "noDriverActionRequired": "La commande %s n'a pas de chauffeur, Action requise!",
+            "newMessage": "Nouveau message %i de: %s"
+        }
+    },
+    "ar": {
+        "messages": {
+            "canceled": "تم إلغاء الطلب %s",
+            "canceledFromManager": "تم إلغاء الطلب %s من طرف",
+            "canceledFromDriver": "تم إلغاء الطلب %s من طرف السائق",
+            "canceledNoDriver": "تم إلغاء الطلب %s لعدم توفر سائق، يرجى المحاولة مرة أخرى لاحقا.",
+            "canceledTo": "تم إلغاء الطلب %s من طرف المستخدم",
+            "confirmed": "تم تأكيد الطلب %s من طرف",
+            "onTheWay": "الطلب %s في الطريق",
+            "prepared": "الطلب %s جاهز للاستلام",
+            "arrived": "الطلب %s قد وصل",
+            "trackOrder": "تعقب الطلب",
+            "viewOrder": "عرض الطلب",
+            "newOrder": "طلب جدبد",
+            "reason": "السبب",
+            "noDriverActionRequired": "الطلب %s ليس لديه سائق، مطلوب التدخل!",
+            "newMessage": "رسالة جديدة %i من: %s"
+        }
+    }
+}

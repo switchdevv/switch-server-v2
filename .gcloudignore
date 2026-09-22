@@ -1,0 +1,11 @@
+# Allowlist: upload only the built server and its manifests. Never .env.local, src/, tests, .legacy/.
+*
+!dist/
+!dist/**
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!app.yaml
+!app.staging.yaml
+!.env.prod
+!.env.staging

@@ -1,0 +1,1032 @@
+{
+  "//": "Prod schema for local dev: switch-server/_SCHEMA.json (2023) + opsAccess/financeAccess, Order call marks, DispatchQueue (as set in the Parse Dashboard). Local only.",
+  "classes": [
+    {
+      "className": "Category",
+      "fields": {
+        "name": {
+          "type": "String"
+        },
+        "picture": {
+          "type": "File"
+        },
+        "translations": {
+          "type": "Object"
+        }
+      },
+      "classLevelPermissions": {
+        "get": {
+          "requiresAuthentication": true,
+          "role:Staff": true
+        },
+        "find": {
+          "requiresAuthentication": true,
+          "role:Staff": true
+        },
+        "count": {
+          "requiresAuthentication": true,
+          "role:Staff": true
+        },
+        "create": {
+          "role:Staff": true
+        },
+        "update": {
+          "role:Staff": true
+        },
+        "delete": {
+          "role:Staff": true
+        },
+        "addField": {},
+        "protectedFields": {
+          "*": []
+        }
+      }
+    },
+    {
+      "className": "FileObject",
+      "fields": {
+        "fileName": {
+          "type": "String"
+        },
+        "createdBy": {
+          "type": "Pointer",
+          "targetClass": "_User"
+        },
+        "file": {
+          "type": "File"
+        }
+      },
+      "classLevelPermissions": {
+        "get": {
+          "role:Staff": true
+        },
+        "find": {
+          "role:Staff": true
+        },
+        "count": {
+          "role:Staff": true
+        },
+        "create": {
+          "role:Staff": true
+        },
+        "update": {
+          "role:Staff": true
+        },
+        "delete": {
+          "role:Staff": true
+        },
+        "addField": {},
+        "protectedFields": {
+          "*": []
+        }
+      }
+    },
+    {
+      "className": "Order",
+      "fields": {
+        "user": {
+          "type": "Pointer",
+          "targetClass": "_User"
+        },
+        "status": {
+          "type": "Number"
+        },
+        "options": {
+          "type": "Object"
+        },
+        "food": {
+          "type": "Array"
+        },
+        "isReady": {
+          "type": "Boolean"
+        },
+        "distance": {
+          "type": "Number"
+        },
+        "duration": {
+          "type": "Number"
+        },
+        "type": {
+          "type": "String"
+        },
+        "deliveryType": {
+          "type": "String"
+        },
+        "driver": {
+          "type": "Pointer",
+          "targetClass": "_User"
+        },
+        "restaurant": {
+          "type": "Pointer",
+          "targetClass": "Restaurant"
+        },
+        "canceled": {
+          "type": "Boolean"
+        },
+        "userAddress": {
+          "type": "Pointer",
+          "targetClass": "Address"
+        },
+        "promo": {
+          "type": "Pointer",
+          "targetClass": "Promo"
+        },
+        "city": {
+          "type": "Pointer",
+          "targetClass": "City"
+        },
+        "driverRated": {
+          "type": "Boolean"
+        },
+        "opsCustomerCall": {
+          "type": "Object"
+        },
+        "opsRestaurantCall": {
+          "type": "Object"
+        }
+      },
+      "classLevelPermissions": {
+        "get": {
+          "requiresAuthentication": true,
+          "role:Staff": true
+        },
+        "find": {
+          "requiresAuthentication": true,
+          "role:Staff": true
+        },
+        "count": {
+          "requiresAuthentication": true,
+          "role:Staff": true
+        },
+        "create": {
+          "role:Staff": true
+        },
+        "update": {
+          "role:Staff": true
+        },
+        "delete": {
+          "role:Staff": true
+        },
+        "addField": {},
+        "protectedFields": {
+          "*": []
+        }
+      }
+    },
+    {
+      "className": "_Session",
+      "fields": {
+        "restricted": {
+          "type": "Boolean"
+        },
+        "user": {
+          "type": "Pointer",
+          "targetClass": "_User"
+        },
+        "installationId": {
+          "type": "String"
+        },
+        "sessionToken": {
+          "type": "String"
+        },
+        "expiresAt": {
+          "type": "Date"
+        },
+        "createdWith": {
+          "type": "Object"
+        }
+      },
+      "classLevelPermissions": {
+        "get": {
+          "requiresAuthentication": true
+        },
+        "find": {
+          "requiresAuthentication": true
+        },
+        "count": {
+          "requiresAuthentication": true
+        },
+        "create": {
+          "requiresAuthentication": true
+        },
+        "update": {
+          "requiresAuthentication": true
+        },
+        "delete": {
+          "requiresAuthentication": true
+        },
+        "addField": {},
+        "protectedFields": {
+          "*": []
+        }
+      }
+    },
+    {
+      "className": "Restaurant",
+      "fields": {
+        "name": {
+          "type": "String"
+        },
+        "description": {
+          "type": "String"
+        },
+        "picture": {
+          "type": "File"
+        },
+        "location": {
+          "type": "GeoPoint"
+        },
+        "isPromo": {
+          "type": "Boolean"
+        },
+        "rating": {
+          "type": "Number"
+        },
+        "reviews": {
+          "type": "Number"
+        },
+        "phone": {
+          "type": "String"
+        },
+        "active": {
+          "type": "Boolean"
+        },
+        "address": {
+          "type": "String"
+        },
+        "ratingTotal": {
+          "type": "Number"
+        },
+        "ordersTotal": {
+          "type": "Number"
+        },
+        "ordersAccepted": {
+          "type": "Number"
+        },
+        "city": {
+          "type": "Pointer",
+          "targetClass": "City"
+        },
+        "categories": {
+          "type": "Array"
+        },
+        "enabled": {
+          "type": "Boolean"
+        },
+        "fee": {
+          "type": "Number"
+        },
+        "manager": {
+          "type": "Pointer",
+          "targetClass": "_User"
+        },
+        "openTime": {
+          "type": "Object"
+        },
+        "closeTime": {
+          "type": "Object"
+        },
+        "pauseStart": {
+          "type": "Object"
+        },
+        "pauseEnd": {
+          "type": "Object"
+        },
+        "workingDays": {
+          "type": "Array"
+        },
+        "searchName": {
+          "type": "String"
+        },
+        "isDiscount": {
+          "type": "Boolean"
+        },
+        "isFeatured": {
+          "type": "Boolean"
+        }
+      },
+      "classLevelPermissions": {
+        "get": {
+          "requiresAuthentication": true
+        },
+        "find": {
+          "requiresAuthentication": true
+        },
+        "count": {
+          "requiresAuthentication": true
+        },
+        "create": {
+          "requiresAuthentication": true
+        },
+        "update": {
+          "requiresAuthentication": true
+        },
+        "delete": {
+          "requiresAuthentication": true
+        },
+        "addField": {},
+        "protectedFields": {
+          "*": []
+        }
+      }
+    },
+    {
+      "className": "Ad",
+      "fields": {
+        "picture": {
+          "type": "File"
+        },
+        "type": {
+          "type": "String"
+        },
+        "data": {
+          "type": "Object"
+        },
+        "city": {
+          "type": "Pointer",
+          "targetClass": "City"
+        }
+      },
+      "classLevelPermissions": {
+        "get": {
+          "requiresAuthentication": true,
+          "role:Staff": true
+        },
+        "find": {
+          "requiresAuthentication": true,
+          "role:Staff": true
+        },
+        "count": {
+          "requiresAuthentication": true,
+          "role:Staff": true
+        },
+        "create": {
+          "role:Staff": true
+        },
+        "update": {
+          "role:Staff": true
+        },
+        "delete": {
+          "role:Staff": true
+        },
+        "addField": {},
+        "protectedFields": {
+          "*": []
+        }
+      }
+    },
+    {
+      "className": "Food",
+      "fields": {
+        "name": {
+          "type": "String"
+        },
+        "description": {
+          "type": "String"
+        },
+        "picture": {
+          "type": "File"
+        },
+        "restaurant": {
+          "type": "Pointer",
+          "targetClass": "Restaurant"
+        },
+        "instructions": {
+          "type": "Array"
+        },
+        "price": {
+          "type": "Number"
+        },
+        "variants": {
+          "type": "Array"
+        },
+        "city": {
+          "type": "Pointer",
+          "targetClass": "City"
+        },
+        "discountPrice": {
+          "type": "Number"
+        },
+        "enabled": {
+          "type": "Boolean"
+        },
+        "list": {
+          "type": "Pointer",
+          "targetClass": "List"
+        },
+        "headers": {
+          "type": "Array"
+        },
+        "isDiscount": {
+          "type": "Boolean"
+        }
+      },
+      "classLevelPermissions": {
+        "get": {
+          "requiresAuthentication": true
+        },
+        "find": {
+          "requiresAuthentication": true
+        },
+        "count": {
+          "requiresAuthentication": true
+        },
+        "create": {
+          "requiresAuthentication": true
+        },
+        "update": {
+          "requiresAuthentication": true
+        },
+        "delete": {
+          "requiresAuthentication": true
+        },
+        "addField": {},
+        "protectedFields": {
+          "*": []
+        }
+      }
+    },
+    {
+      "className": "City",
+      "fields": {
+        "geofence": {
+          "type": "Polygon"
+        },
+        "currency": {
+          "type": "String"
+        },
+        "fees": {
+          "type": "Object"
+        },
+        "name": {
+          "type": "String"
+        },
+        "zoom": {
+          "type": "Number"
+        }
+      },
+      "classLevelPermissions": {
+        "get": {
+          "requiresAuthentication": true,
+          "role:Staff": true
+        },
+        "find": {
+          "requiresAuthentication": true,
+          "role:Staff": true
+        },
+        "count": {
+          "requiresAuthentication": true,
+          "role:Staff": true
+        },
+        "create": {
+          "role:Staff": true
+        },
+        "update": {
+          "role:Staff": true
+        },
+        "delete": {
+          "role:Staff": true
+        },
+        "addField": {},
+        "protectedFields": {
+          "*": []
+        }
+      }
+    },
+    {
+      "className": "Promo",
+      "fields": {
+        "expirationDate": {
+          "type": "Date"
+        },
+        "code": {
+          "type": "String"
+        },
+        "type": {
+          "type": "String"
+        },
+        "city": {
+          "type": "Pointer",
+          "targetClass": "City"
+        },
+        "restaurant": {
+          "type": "Pointer",
+          "targetClass": "Restaurant"
+        },
+        "appType": {
+          "type": "String"
+        },
+        "useType": {
+          "type": "String"
+        },
+        "value": {
+          "type": "Number"
+        },
+        "minCost": {
+          "type": "Number"
+        },
+        "food": {
+          "type": "Pointer",
+          "targetClass": "Food"
+        },
+        "maxDiscountValue": {
+          "type": "Number"
+        }
+      },
+      "classLevelPermissions": {
+        "get": {
+          "requiresAuthentication": true
+        },
+        "find": {
+          "requiresAuthentication": true
+        },
+        "count": {
+          "requiresAuthentication": true
+        },
+        "create": {
+          "requiresAuthentication": true
+        },
+        "update": {
+          "requiresAuthentication": true
+        },
+        "delete": {
+          "requiresAuthentication": true
+        },
+        "addField": {},
+        "protectedFields": {
+          "*": []
+        }
+      }
+    },
+    {
+      "className": "Message",
+      "fields": {
+        "user": {
+          "type": "Pointer",
+          "targetClass": "_User"
+        },
+        "fullname": {
+          "type": "String"
+        },
+        "email": {
+          "type": "String"
+        },
+        "phone": {
+          "type": "String"
+        },
+        "message": {
+          "type": "String"
+        }
+      },
+      "classLevelPermissions": {
+        "get": {
+          "role:Staff": true
+        },
+        "find": {
+          "role:Staff": true
+        },
+        "count": {
+          "role:Staff": true
+        },
+        "create": {
+          "requiresAuthentication": true,
+          "role:Staff": true
+        },
+        "update": {
+          "requiresAuthentication": true,
+          "role:Staff": true
+        },
+        "delete": {
+          "requiresAuthentication": true,
+          "role:Staff": true
+        },
+        "addField": {},
+        "protectedFields": {
+          "*": []
+        }
+      }
+    },
+    {
+      "className": "Address",
+      "fields": {
+        "name": {
+          "type": "String"
+        },
+        "user": {
+          "type": "Pointer",
+          "targetClass": "_User"
+        },
+        "address": {
+          "type": "String"
+        },
+        "location": {
+          "type": "GeoPoint"
+        }
+      },
+      "classLevelPermissions": {
+        "get": {
+          "requiresAuthentication": true
+        },
+        "find": {
+          "requiresAuthentication": true
+        },
+        "count": {
+          "requiresAuthentication": true
+        },
+        "create": {
+          "requiresAuthentication": true
+        },
+        "update": {
+          "requiresAuthentication": true
+        },
+        "delete": {
+          "requiresAuthentication": true
+        },
+        "addField": {},
+        "protectedFields": {
+          "*": []
+        }
+      }
+    },
+    {
+      "className": "Review",
+      "fields": {
+        "user": {
+          "type": "Pointer",
+          "targetClass": "_User"
+        },
+        "restaurant": {
+          "type": "Pointer",
+          "targetClass": "Restaurant"
+        },
+        "review": {
+          "type": "String"
+        },
+        "rating": {
+          "type": "Number"
+        },
+        "picture": {
+          "type": "File"
+        },
+        "driver": {
+          "type": "Pointer",
+          "targetClass": "_User"
+        },
+        "city": {
+          "type": "Pointer",
+          "targetClass": "City"
+        }
+      },
+      "classLevelPermissions": {
+        "get": {
+          "requiresAuthentication": true
+        },
+        "find": {
+          "requiresAuthentication": true
+        },
+        "count": {
+          "requiresAuthentication": true
+        },
+        "create": {
+          "requiresAuthentication": true
+        },
+        "update": {
+          "requiresAuthentication": true
+        },
+        "delete": {
+          "requiresAuthentication": true
+        },
+        "addField": {},
+        "protectedFields": {
+          "*": []
+        }
+      }
+    },
+    {
+      "className": "_Role",
+      "fields": {
+        "name": {
+          "type": "String"
+        },
+        "users": {
+          "type": "Relation",
+          "targetClass": "_User"
+        },
+        "roles": {
+          "type": "Relation",
+          "targetClass": "_Role"
+        }
+      },
+      "classLevelPermissions": {
+        "get": {},
+        "find": {},
+        "count": {},
+        "create": {},
+        "update": {},
+        "delete": {},
+        "addField": {},
+        "protectedFields": {
+          "*": []
+        }
+      }
+    },
+    {
+      "className": "_User",
+      "fields": {
+        "username": {
+          "type": "String"
+        },
+        "email": {
+          "type": "String"
+        },
+        "emailVerified": {
+          "type": "Boolean"
+        },
+        "authData": {
+          "type": "Object"
+        },
+        "phone": {
+          "type": "String"
+        },
+        "picture": {
+          "type": "File"
+        },
+        "language": {
+          "type": "String"
+        },
+        "theme": {
+          "type": "String"
+        },
+        "fullname": {
+          "type": "String"
+        },
+        "cartFood": {
+          "type": "Array"
+        },
+        "cartOptions": {
+          "type": "Object"
+        },
+        "favorites": {
+          "type": "Array"
+        },
+        "promosUsed": {
+          "type": "Array"
+        },
+        "payment": {
+          "type": "Object"
+        },
+        "address": {
+          "type": "Pointer",
+          "targetClass": "Address"
+        },
+        "driverActive": {
+          "type": "Boolean"
+        },
+        "pushToken": {
+          "type": "Object"
+        },
+        "appType": {
+          "type": "Array"
+        },
+        "driverLocation": {
+          "type": "GeoPoint"
+        },
+        "driverRating": {
+          "type": "Number"
+        },
+        "promoNotifs": {
+          "type": "Boolean"
+        },
+        "driverOrdersAccepted": {
+          "type": "Number"
+        },
+        "staffType": {
+          "type": "String"
+        },
+        "managerStore": {
+          "type": "Pointer",
+          "targetClass": "Restaurant"
+        },
+        "driverParams": {
+          "type": "Object"
+        },
+        "enabled": {
+          "type": "Boolean"
+        },
+        "city": {
+          "type": "Pointer",
+          "targetClass": "City"
+        },
+        "tmpUser": {
+          "type": "Boolean"
+        },
+        "opsAccess": {
+          "type": "Boolean"
+        },
+        "financeAccess": {
+          "type": "Boolean"
+        }
+      },
+      "classLevelPermissions": {
+        "get": {
+          "requiresAuthentication": true
+        },
+        "find": {
+          "requiresAuthentication": true
+        },
+        "count": {
+          "requiresAuthentication": true
+        },
+        "create": {
+          "requiresAuthentication": true,
+          "*": true
+        },
+        "update": {
+          "requiresAuthentication": true,
+          "*": true
+        },
+        "delete": {
+          "requiresAuthentication": true,
+          "*": true
+        },
+        "addField": {},
+        "protectedFields": {
+          "*": [
+            "password",
+            "payment",
+            "favorites",
+            "language",
+            "theme",
+            "cartOptions",
+            "cartFood",
+            "pushToken",
+            "emailVerified",
+            "promosUsed",
+            "promoNotifs",
+            "email"
+          ]
+        }
+      }
+    },
+    {
+      "className": "Notification",
+      "fields": {
+        "title": {
+          "type": "String"
+        },
+        "body": {
+          "type": "String"
+        },
+        "picture": {
+          "type": "File"
+        },
+        "data": {
+          "type": "Object"
+        },
+        "appType": {
+          "type": "String"
+        },
+        "city": {
+          "type": "Pointer",
+          "targetClass": "City"
+        },
+        "user": {
+          "type": "Pointer",
+          "targetClass": "_User"
+        }
+      },
+      "classLevelPermissions": {
+        "get": {
+          "role:Staff": true
+        },
+        "find": {
+          "role:Staff": true
+        },
+        "count": {
+          "role:Staff": true
+        },
+        "create": {
+          "role:Staff": true
+        },
+        "update": {
+          "role:Staff": true
+        },
+        "delete": {
+          "role:Staff": true
+        },
+        "addField": {},
+        "protectedFields": {}
+      }
+    },
+    {
+      "className": "List",
+      "fields": {
+        "name": {
+          "type": "String"
+        },
+        "restaurant": {
+          "type": "Pointer",
+          "targetClass": "Restaurant"
+        },
+        "enabled": {
+          "type": "Boolean"
+        }
+      },
+      "classLevelPermissions": {
+        "get": {
+          "requiresAuthentication": true
+        },
+        "find": {
+          "requiresAuthentication": true
+        },
+        "count": {
+          "requiresAuthentication": true
+        },
+        "create": {
+          "requiresAuthentication": true
+        },
+        "update": {
+          "requiresAuthentication": true
+        },
+        "delete": {
+          "requiresAuthentication": true
+        },
+        "addField": {},
+        "protectedFields": {
+          "*": []
+        }
+      }
+    },
+    {
+      "className": "DispatchQueue",
+      "fields": {
+        "order": {
+          "type": "Pointer",
+          "targetClass": "Order"
+        },
+        "driver": {
+          "type": "Pointer",
+          "targetClass": "_User"
+        },
+        "city": {
+          "type": "Pointer",
+          "targetClass": "City"
+        },
+        "queuedBy": {
+          "type": "Pointer",
+          "targetClass": "_User"
+        },
+        "rank": {
+          "type": "Number"
+        },
+        "state": {
+          "type": "String"
+        },
+        "dropReason": {
+          "type": "String"
+        },
+        "claim": {
+          "type": "Number"
+        },
+        "claimedAt": {
+          "type": "Date"
+        },
+        "dispatchedAt": {
+          "type": "Date"
+        },
+        "lastError": {
+          "type": "String"
+        },
+        "lastAttemptAt": {
+          "type": "Date"
+        }
+      },
+      "classLevelPermissions": {
+        "get": {
+          "role:Staff": true
+        },
+        "find": {
+          "role:Staff": true
+        },
+        "count": {
+          "role:Staff": true
+        },
+        "create": {
+          "role:Staff": true
+        },
+        "update": {
+          "role:Staff": true
+        },
+        "delete": {
+          "role:Staff": true
+        },
+        "addField": {},
+        "protectedFields": {
+          "*": []
+        },
+        "readUserFields": ["driver"],
+        "writeUserFields": ["driver"]
+      }
+    }
+  ]
+}

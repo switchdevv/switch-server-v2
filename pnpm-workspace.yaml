@@ -1,0 +1,19 @@
+# pnpm blocks dependency install scripts by default; allow only what needs them.
+# parse-server / core-js-pure / @apollo/protobufjs postinstalls only print banners or
+# generate GraphQL/protobuf code paths we don't use.
+allowBuilds:
+  esbuild: true
+  mongodb-memory-server: true
+  protobufjs: false
+  '@firebase/util': false
+  '@apollo/protobufjs': false
+  core-js-pure: false
+  parse-server: false
+minimumReleaseAgeExclude:
+  - tsx@4.23.15
+savePrefix: ''
+# Patched versions of vulnerable transitive dependencies (pnpm audit, high). Same major as pinned
+# upstream; drop each entry once parse / express-rate-limit ship the fix.
+overrides:
+  ws@<8.21.0: 8.21.3 # via parse (LiveQuery client, unused)
+  ip-address@<10.3.1: 10.7.2 # via express-rate-limit (rateLimit not configured)

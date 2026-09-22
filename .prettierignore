@@ -1,0 +1,6 @@
+dist
+coverage
+.legacy
+pnpm-lock.yaml
+src/i18n/translations.json
+docs

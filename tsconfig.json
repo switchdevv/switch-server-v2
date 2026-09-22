@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "es2024",
+    "lib": ["es2024"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "types": ["node"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "exactOptionalPropertyTypes": false,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "sourceMap": true,
+    "outDir": "dist",
+    "rootDir": "."
+  },
+  "include": ["src", "test", "tools", "vitest.config.ts", "eslint.config.js"]
+}

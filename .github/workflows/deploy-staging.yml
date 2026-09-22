@@ -1,0 +1,148 @@
+# Continuous deployment to staging (never production). Every push to main, or a manual run from
+# main: the ci checks, then the dist/ they built goes to App Engine as a new version without
+# traffic, and it only takes the traffic once its /health and /config answer. Old versions are
+# deleted, the newest few kept for rollback. Setup, rollback and troubleshooting:
+# docs/05-staging.md.
+name: deploy-staging
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash # explicit: adds pipefail
+
+# One deploy at a time: a newer push waits, and replaces any deploy that is still waiting.
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+    with:
+      upload-build: true
+
+  deploy:
+    needs: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write # Workload Identity Federation: GitHub holds no Google key
+    env:
+      # Repository variables (Settings → Secrets and variables → Actions → Variables).
+      PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      WIF_PROVIDER: ${{ vars.GCP_WIF_PROVIDER }}
+      DEPLOY_SA: ${{ vars.GCP_DEPLOY_SA }}
+      KEEP_VERSIONS: 5
+    steps:
+      - name: Check the repository variables
+        run: |
+          missing=""
+          [ -n "$PROJECT_ID" ] || missing="$missing GCP_PROJECT_ID"
+          [ -n "$WIF_PROVIDER" ] || missing="$missing GCP_WIF_PROVIDER"
+          [ -n "$DEPLOY_SA" ] || missing="$missing GCP_DEPLOY_SA"
+          if [ -n "$missing" ]; then
+            echo "::error::Set these repository variables:$missing (docs/05-staging.md, step 9)."
+            exit 1
+          fi
+          # App Engine version ids: lowercase letters, digits and hyphens.
+          echo "VERSION=v${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v7
+      - name: Get the build ci tested
+        uses: actions/download-artifact@v8
+        with:
+          name: server-build
+          path: dist
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+      - uses: google-github-actions/setup-gcloud@v3
+      - name: Preflight (.env.staging matches the staging project)
+        id: preflight
+        run: node tools/deploy/staging-preflight.ts --project "$PROJECT_ID"
+      - name: Deploy ${{ env.VERSION }} without traffic
+        run: >
+          gcloud app deploy app.staging.yaml --project="$PROJECT_ID" --version="$VERSION"
+          --no-promote --quiet
+      - name: Smoke test ${{ env.VERSION }}
+        id: smoke
+        env:
+          APP_ID: ${{ steps.preflight.outputs.app_id }}
+        run: |
+          url=$(gcloud app versions describe "$VERSION" --service=default --project="$PROJECT_ID" \
+            --format='value(versionUrl)')
+          echo "version_url=$url" >> "$GITHUB_OUTPUT"
+          logs="gcloud app logs read --project=$PROJECT_ID --service=default --version=$VERSION --limit=100"
+          # A cold start (Secret Manager, MongoDB, Parse) takes a while; give it three minutes.
+          ok=""
+          for _ in $(seq 36); do
+            code=$(curl -s -o "$RUNNER_TEMP/health.json" -w '%{http_code}' --max-time 20 \
+              "$url/health" || true)
+            if [ "$code" = 200 ] && grep -q '"status":"ok"' "$RUNNER_TEMP/health.json"; then
+              ok=1
+              break
+            fi
+            echo "not ready yet (HTTP ${code:-none})"
+            sleep 5
+          done
+          if [ -z "$ok" ]; then
+            echo "::error::$VERSION never answered /health. It has no traffic. Boot log: $logs"
+            exit 1
+          fi
+          # A read through Parse and MongoDB with the public app id only: no key, no write.
+          if ! curl -sS --fail --max-time 20 -H "X-Parse-Application-Id: $APP_ID" "$url/config" \
+            -o "$RUNNER_TEMP/config.json" || ! grep -q '"params"' "$RUNNER_TEMP/config.json"; then
+            echo "::error::$VERSION is up but GET /config failed. It has no traffic. Log: $logs"
+            exit 1
+          fi
+          echo "$VERSION is healthy at $url"
+      - name: Move all traffic to ${{ env.VERSION }}
+        env:
+          STAGING_URL: ${{ steps.preflight.outputs.url }}
+        run: |
+          gcloud app services set-traffic default --splits="$VERSION=1" --project="$PROJECT_ID" --quiet
+          curl -sS --fail --max-time 30 "$STAGING_URL/health"
+          echo
+      - name: Delete old versions (keeps the newest ${{ env.KEEP_VERSIONS }} for rollback)
+        continue-on-error: true # staging is already live on the new version
+        run: |
+          gcloud app versions list --service=default --project="$PROJECT_ID" \
+            --sort-by='~version.createTime' --format='value(id,traffic_split)' |
+            awk '$2 + 0 == 0 { print $1 }' | tail -n +$((KEEP_VERSIONS + 1)) > "$RUNNER_TEMP/old"
+          if [ -s "$RUNNER_TEMP/old" ]; then
+            xargs gcloud app versions delete --service=default --project="$PROJECT_ID" --quiet \
+              < "$RUNNER_TEMP/old"
+          else
+            echo "Nothing to delete."
+          fi
+      - name: Summary
+        if: always()
+        env:
+          STATUS: ${{ job.status }}
+          STAGING_URL: ${{ steps.preflight.outputs.url }}
+          VERSION_URL: ${{ steps.smoke.outputs.version_url }}
+        run: |
+          {
+            echo "### Staging deploy: $STATUS"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Version | \`${VERSION:-none}\` |"
+            echo "| Commit | \`$GITHUB_SHA\` |"
+            echo "| Staging | ${STAGING_URL:-n/a} |"
+            echo "| This version | ${VERSION_URL:-n/a} |"
+            echo
+            echo "Roll back: \`gcloud app services set-traffic default --splits=<older-version>=1 --project=$PROJECT_ID\`"
+          } >> "$GITHUB_STEP_SUMMARY"

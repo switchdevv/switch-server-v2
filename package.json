@@ -1,0 +1,61 @@
+{
+  "name": "switch-server-v2",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Switch Parse Server (v2): Parse Server 9, Node 24, TypeScript. Wire-compatible with switch-server (legacy).",
+  "type": "module",
+  "packageManager": "pnpm@11.9.0",
+  "engines": {
+    "node": "24.x",
+    "pnpm": "11.9.0"
+  },
+  "scripts": {
+    "dev": "APP_ENV=${APP_ENV:-local} tsx watch src/main.ts",
+    "dev:all": "node tools/dev-all.mjs",
+    "stack:up": "docker compose up -d --wait mongo s3",
+    "stack:down": "docker compose down",
+    "seed": "tsx tools/seed/index.ts",
+    "db:reset": "tsx tools/seed/index.ts --reset",
+    "seed:staging": "tsx tools/seed/staging.ts",
+    "staging:secret": "tsx tools/staging-secret.ts",
+    "staging:preflight": "node tools/deploy/staging-preflight.ts",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && mkdir -p dist/i18n && cp src/i18n/translations.json dist/i18n/translations.json",
+    "gcp-build": "",
+    "start": "node --enable-source-maps dist/main.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "check": "pnpm typecheck && pnpm lint && pnpm test",
+    "setup:env": "node tools/setup-env.mjs",
+    "fingerprint": "node tools/fingerprint.mjs"
+  },
+  "dependencies": {
+    "@google-cloud/secret-manager": "7.1.0",
+    "@parse/s3-files-adapter": "5.3.1",
+    "@sendgrid/mail": "8.1.6",
+    "express": "5.2.1",
+    "firebase-admin": "14.4.0",
+    "mongodb": "7.1.0",
+    "parse": "8.6.0",
+    "parse-server": "9.10.0",
+    "pino": "10.3.1",
+    "pusher": "5.3.4",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/express": "5.0.6",
+    "@types/node": "24.13.6",
+    "eslint": "10.11.0",
+    "mongodb-memory-server": "11.2.0",
+    "prettier": "3.9.8",
+    "tsx": "4.23.15",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.70.0",
+    "vitest": "5.0.1"
+  }
+}

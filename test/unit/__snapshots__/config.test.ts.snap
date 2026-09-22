@@ -1,0 +1,116 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Parse Server options (plan §5, R7) > keeps the snapshot (update only with a Deviation Register entry) 1`] = `
+{
+  "allowAggregationForReadOnlyMasterKey": false,
+  "allowClientClassCreation": false,
+  "allowCustomObjectId": false,
+  "appId": "switchApp",
+  "appName": "Switch",
+  "auth": {
+    "apple": {
+      "clientId": [
+        "com.switchapp.food",
+        "com.switchapp.driver",
+        "com.switchapp.manager",
+      ],
+      "enabled": true,
+    },
+    "facebook": {
+      "appIds": [
+        "1234567890",
+      ],
+      "enabled": true,
+    },
+    "google": {
+      "clientId": "test-google-client-id.apps.googleusercontent.com",
+      "enabled": true,
+    },
+  },
+  "convertEmailToLowercase": false,
+  "convertUsernameToLowercase": false,
+  "databaseOptions": {
+    "enableSchemaHooks": true,
+  },
+  "databaseURI": "mongodb://127.0.0.1:27018/switch_test",
+  "directAccess": true,
+  "emailVerifyTokenValidityDuration": 172800,
+  "enableInsecureAuthAdapters": false,
+  "enforcePrivateUsers": false,
+  "expireInactiveSessions": true,
+  "fileUpload": {
+    "allowedFileUrlDomains": [
+      "*",
+    ],
+    "enableForAnonymousUser": true,
+    "enableForAuthenticatedUser": true,
+    "enableForPublic": true,
+  },
+  "installation": {
+    "duplicateDeviceTokenActionEnforceAuth": false,
+  },
+  "jsonLogs": false,
+  "logLevel": "error",
+  "logLevels": {
+    "cloudFunctionError": "silent",
+    "cloudFunctionSuccess": "verbose",
+    "triggerAfter": "verbose",
+    "triggerBeforeError": "silent",
+    "triggerBeforeSuccess": "verbose",
+  },
+  "logsFolder": null,
+  "maintenanceKey": "test-maintenance-key",
+  "maintenanceKeyIps": [
+    "127.0.0.1",
+    "::1",
+  ],
+  "masterKey": "test-master-key",
+  "masterKeyIps": [
+    "0.0.0.0/0",
+    "::/0",
+  ],
+  "maxUploadSize": "20mb",
+  "mountGraphQL": false,
+  "pages": {
+    "encodePageParamHeaders": false,
+  },
+  "passwordPolicy": {
+    "resetTokenValidityDuration": 7200,
+  },
+  "preserveFileName": false,
+  "preventLoginWithUnverifiedEmail": false,
+  "protectedFields": {
+    "_User": {
+      "*": [
+        "email",
+      ],
+    },
+  },
+  "protectedFieldsOwnerExempt": true,
+  "protectedFieldsSaveResponseExempt": true,
+  "protectedFieldsTriggerExempt": false,
+  "publicServerURL": "http://localhost:1337",
+  "readOnlyMasterKeyIps": [
+    "127.0.0.1",
+    "::1",
+  ],
+  "requestComplexity": {
+    "batchRequestLimit": -1,
+    "graphQLDepth": -1,
+    "graphQLFields": -1,
+    "includeCount": -1,
+    "includeDepth": -1,
+    "queryDepth": -1,
+    "subqueryDepth": -1,
+  },
+  "security": {
+    "enableCheck": false,
+    "enableCheckLog": false,
+  },
+  "serverURL": "http://localhost:1337",
+  "sessionLength": 31536000,
+  "silent": true,
+  "startLiveQueryServer": false,
+  "verifyUserEmails": true,
+}
+`;

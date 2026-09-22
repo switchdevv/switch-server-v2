@@ -1,0 +1,48 @@
+# Local stack for `pnpm dev` (APP_ENV=local). Nothing here talks to production.
+# Mongo is on 27018 because 27017 is taken on this Mac by an unrelated container.
+services:
+  mongo:
+    image: mongo:8.0.4-noble # pinned; match prod's major once pre-flight (§14) records it
+    command: ['--replSet', 'rs0', '--bind_ip_all', '--port', '27017']
+    ports: ['27018:27017']
+    volumes: [mongo-data:/data/db]
+    healthcheck:
+      # Initiates the single-node replica set on first start (Parse schema hooks need change streams).
+      # The member advertises its in-container address localhost:27017, so connect from the host
+      # with ?directConnection=true: replica-set discovery would follow it to the host's 27017.
+      test:
+        [
+          'CMD',
+          'mongosh',
+          '--quiet',
+          '--eval',
+          "try { rs.status().ok } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'localhost:27017' }] }).ok }",
+        ]
+      interval: 5s
+      retries: 20
+  # Local S3, for the same files adapter (and URL shape) as the Spaces bucket in production.
+  # SeaweedFS replaced MinIO on 2026-09-21: MinIO's community edition was archived and is now
+  # source-only, and its images were removed from Docker Hub. `mini` is its single-process mode
+  # (master + volume + filer + S3). With no identities configured every request counts as admin,
+  # so uploads are signed but unchecked and the file URLs are publicly readable, like Spaces.
+  s3:
+    image: chrislusf/seaweedfs:4.47
+    command:
+      - mini
+      - -dir=/data
+      - -s3.port=9000 # the port the apps and .env.local expect
+      - -bucket=switchfood-local # created on startup if missing
+      - -master.telemetry=false # no anonymous stats from a dev machine
+      - -webdav=false
+      - -admin.ui=false
+      - -s3.port.iceberg=0
+      - -s3.port.lance=0
+    ports: ['9000:9000']
+    volumes: [s3-data:/data]
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:9000/']
+      interval: 5s
+      retries: 20
+volumes:
+  mongo-data:
+  s3-data:

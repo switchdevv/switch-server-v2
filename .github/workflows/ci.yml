@@ -1,0 +1,79 @@
+# Checks every pull request. deploy-staging.yml calls it again before each staging deploy and then
+# deploys the exact dist/ built here (`upload-build`).
+name: ci
+
+on:
+  pull_request:
+  workflow_call:
+    inputs:
+      upload-build:
+        description: Upload dist/ as the `server-build` artifact for the deploy job.
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash # explicit: adds pipefail
+
+concurrency:
+  # Distinct from the caller's group when called, so the two never wait on each other. On pull
+  # requests a new push cancels the run it replaces.
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6 # the version in package.json `packageManager`
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      # The integration tests download a MongoDB binary (mongodb-memory-server); keep it cached.
+      - run: echo "MONGOMS_DOWNLOAD_DIR=$HOME/.cache/mongodb-binaries" >> "$GITHUB_ENV"
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/mongodb-binaries
+          key: mongodb-binaries-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: mongodb-binaries-${{ runner.os }}-
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm format:check
+      - run: pnpm test # unit + integration (in-memory MongoDB replica set)
+      - run: pnpm build
+      - run: pnpm audit --prod --audit-level high
+      - name: Keep the build for the deploy job
+        if: inputs.upload-build
+        uses: actions/upload-artifact@v7
+        with:
+          name: server-build
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # The gitleaks CLI itself (no license needed), pinned to its release checksum.
+      GITLEAKS_VERSION: 8.30.1
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Install gitleaks
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/gitleaks.tar.gz" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  $RUNNER_TEMP/gitleaks.tar.gz" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP"
+      - name: Scan the whole git history
+        run: '"$RUNNER_TEMP/gitleaks" git --redact --no-banner --verbose .'

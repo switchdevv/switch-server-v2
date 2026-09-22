@@ -1,0 +1,16 @@
+node_modules/
+dist/
+coverage/
+.legacy/
+.env
+.env.*
+# Committed on purpose: documentation, fake test values and the non-secret per-environment config
+# (docs/03-environments-and-dev-setup.md §2). A test fails if one of them holds a secret.
+!.env.example
+!.env.test
+!.env.staging
+!.env.prod
+*.log
+.DS_Store
+logs/
+
