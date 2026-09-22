@@ -65,6 +65,11 @@ export const EnvSchema = z
     PARSE_SERVER_URL: z.url().optional(),
     MASTER_KEY_IPS: list,
     TRUST_PROXY: z.string().optional(),
+    // App Engine: the request header that carries the client's IP (x-appengine-user-ip).
+    CLIENT_IP_HEADER: z
+      .string()
+      .optional()
+      .transform((s) => s?.trim().toLowerCase() || undefined),
     DB_MAX_POOL_SIZE: optionalInt,
     DB_MAX_TIME_MS: optionalInt,
     DB_SERVER_SELECTION_TIMEOUT_MS: optionalInt,

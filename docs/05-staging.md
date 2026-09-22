@@ -306,20 +306,28 @@ that already has users.
 
 ### Check the master key is closed
 
-Staging accepts the master key only from the server itself (`MASTER_KEY_IPS=127.0.0.1,::1`). Check
-that your machine is refused:
+Staging accepts the master key only from the server itself (`MASTER_KEY_IPS=127.0.0.1,::1`). On
+App Engine every request reaches the server from the instance's own proxy on loopback, so the
+server takes the client's address from App Engine's `X-AppEngine-User-IP` header
+(`CLIENT_IP_HEADER`) and never from the connection. Check that your machine is refused, both
+plainly and when it claims to be the server:
 
 ```bash
 KEY=$(gcloud secrets versions access "$(grep '^SECRETS_VERSION=' .env.staging | cut -d= -f2)" \
-  --secret=switch-server-env --project="$PROJECT_ID" | node -pe 'JSON.parse(require("fs").readFileSync(0)).PARSE_MASTER_KEY')
+  --secret="$(grep '^SECRETS_NAME=' .env.staging | cut -d= -f2)" --project="$PROJECT_ID" \
+  | node -pe 'JSON.parse(require("fs").readFileSync(0)).PARSE_MASTER_KEY')
 curl -s -H 'X-Parse-Application-Id: switchApp' -H "X-Parse-Master-Key: $KEY" "https://$HOST/schemas"
+curl -s -H 'X-Parse-Application-Id: switchApp' -H "X-Parse-Master-Key: $KEY" \
+  -H 'X-AppEngine-User-IP: 127.0.0.1' -H 'X-Forwarded-For: 127.0.0.1' "https://$HOST/schemas"
+unset KEY
 ```
 
-Expected: `{"error":"unauthorized"}`. The server log then says `Request using master key rejected as
-the request IP address '…'`: that address is App Engine's proxy, the measurement plan P4-3 needs
-before `TRUST_PROXY` (and Parse Dashboard from your IP) can be set. **If you get the schemas
-instead, stop**: the master key is open to the internet; set `MASTER_KEY_IPS` and `TRUST_PROXY`
-before anything else.
+Expected, twice: `{"error":"unauthorized"}`. The server log then says `Request using master key
+rejected as the request IP address '…'` with **your own public address** in it. If you get the
+schemas instead, **stop**: the master key is open to the internet. Check that the deployed
+`.env.staging` has `CLIENT_IP_HEADER=x-appengine-user-ip` (the server refuses to boot in staging
+without it). If only the second command gets through, App Engine passed the client's header on,
+which it must not do: turn the master key off (`MASTER_KEY_IPS=` empty) until that is understood.
 
 ---
 
@@ -355,6 +363,7 @@ to testers' phones.
 | Uploads fail on staging (`AccessDenied`) | The Spaces key is limited to some buckets (step 3). |
 | No OTP SMS | The number is not in `SMS_PHONE_ALLOWLIST` exactly as the app sends it (`+213…`, no spaces). |
 | No email | The address is not in `MAIL_ALLOWLIST`. |
+| Boot: `CLIENT_IP_HEADER must be set in staging` | `.env.staging` lost `CLIENT_IP_HEADER=x-appengine-user-ip`. Without it every request looks like it comes from the server itself and gets the master key. |
 | No push | Only app builds registered with the staging Firebase project receive them (step 5). |
 
 ## Not covered here

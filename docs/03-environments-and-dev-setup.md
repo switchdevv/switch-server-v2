@@ -71,6 +71,7 @@ value lives in `switch-server/configs.js` today.
 | `PARSE_SERVER_URL` | | defaults to `http://localhost:${PORT}` | same default | *(legacy used the public URL)* |
 | `MASTER_KEY_IPS` | | `0.0.0.0/0,::/0` (**allowed only in local/test**) | `.env.prod` (OD-6) | *(any IP)* |
 | `TRUST_PROXY` | | unset | `.env.prod`, measured in P4-3 | — |
+| `CLIENT_IP_HEADER` | | unset | `x-appengine-user-ip` in `.env.staging` and `.env.prod` (required in staging) | — |
 | `DB_MAX_POOL_SIZE`, `DB_MAX_TIME_MS`, `DB_SERVER_SELECTION_TIMEOUT_MS` | | driver defaults | `.env.prod`, from rehearsal | — |
 
 ### Auth adapters (public identifiers, not secrets)

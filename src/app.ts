@@ -182,6 +182,20 @@ export async function createApp(env: Env, overrides: AppOverrides = {}): Promise
   // sub-app, Parse inherits this setting, so req.ip (checked against masterKeyIps) is the client.
   const trustProxy = trustProxySetting(env);
   if (trustProxy) app.set('trust proxy', trustProxy);
+  // On App Engine every request reaches Node from the instance's own serving proxy on loopback,
+  // so the socket address (req.ip without trust proxy) is 127.0.0.1 for the whole internet and a
+  // loopback-only MASTER_KEY_IPS lets everyone in. App Engine puts the client's address in its own
+  // header instead; Parse checks masterKeyIps/maintenanceKeyIps against req.ip, so req.ip becomes
+  // that header. A request without it matches no allowed address.
+  const clientIpHeader = env.CLIENT_IP_HEADER;
+  if (clientIpHeader) {
+    app.use((req, _res, next) => {
+      const value = req.headers[clientIpHeader];
+      const ip = typeof value === 'string' ? value.trim() : '';
+      Object.defineProperty(req, 'ip', { value: ip || '0.0.0.0', configurable: true });
+      next();
+    });
+  }
   // App Engine warmup requests (inbound_services: warmup).
   app.get('/_ah/warmup', (_req, res) => {
     res.status(200).send('ok');

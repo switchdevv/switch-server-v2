@@ -127,6 +127,7 @@ describe('prod-leak guard (plan §3.5)', () => {
   it('staging may not open the master key to every IP', () => {
     const env = withEnv({
       APP_ENV: 'staging',
+      CLIENT_IP_HEADER: 'x-appengine-user-ip',
       MAIL_DRIVER: 'allowlist',
       SMS_DRIVER: 'allowlist',
       FILES_DRIVER: 's3',
@@ -135,6 +136,21 @@ describe('prod-leak guard (plan §3.5)', () => {
       S3_BASE_URL: 'http://localhost:9000/switchfood-staging',
     });
     expect(prodLeakProblems(env)).toEqual([expect.stringContaining('MASTER_KEY_IPS')]);
+  });
+
+  it('staging must read the client IP from App Engine, not the loopback socket', () => {
+    const env = withEnv({
+      APP_ENV: 'staging',
+      MASTER_KEY_IPS: '127.0.0.1,::1',
+      CLIENT_IP_HEADER: '',
+      MAIL_DRIVER: 'allowlist',
+      SMS_DRIVER: 'allowlist',
+      FILES_DRIVER: 's3',
+      S3_BUCKET: 'switchfood-staging',
+      S3_ENDPOINT: 'http://localhost:9000',
+      S3_BASE_URL: 'http://localhost:9000/switchfood-staging',
+    });
+    expect(prodLeakProblems(env)).toEqual([expect.stringContaining('CLIENT_IP_HEADER')]);
   });
 
   it('never runs in production', () => {

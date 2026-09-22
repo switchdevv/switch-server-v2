@@ -253,7 +253,7 @@ release notes.
 | `enforcePrivateUsers` | n/a (users public-read) | **`true`** | **`false`** | Clients read other users; finance relies on `_User` public read. |
 | `directAccess` | `false` | **`true`** | `true` | Cloud-code SDK calls no longer cross the internet. Triggers still run. Invisible to clients. |
 | `masterKeyIps` | `[]` = any IP | **`['127.0.0.1','::1']`** | `MASTER_KEY_IPS` env (OD-6) | Parse Dashboard operators use the master key remotely. Legacy's own file-delete self-call is removed (§6.4). |
-| `trustProxy` | n/a | `[]` | `TRUST_PROXY` env, set on **v2's Express app** (measured in staging, P4-3) | Needed for correct `req.ip` behind Google's proxies, which `masterKeyIps` checks. Parse applies its own option only in `startApp()`, which v2 doesn't use, so `createApp` sets `trust proxy` itself. |
+| `trustProxy` | n/a | `[]` | `TRUST_PROXY` env, set on **v2's Express app** (measured in staging, P4-3) | Needed for correct `req.ip` behind Google's proxies, which `masterKeyIps` checks. Parse applies its own option only in `startApp()`, which v2 doesn't use, so `createApp` sets `trust proxy` itself. **Found on staging (2026-09-22):** App Engine's proxy connects from loopback, so without it a loopback-only `masterKeyIps` accepted the master key from anywhere. v2 now sets `req.ip` from `X-AppEngine-User-IP` (`CLIENT_IP_HEADER`, required in staging). |
 | `verifyUserEmails` | `true` | `false` | `true` | unchanged |
 | `emailVerifyTokenValidityDuration` | 172800 | undefined | 172800 | unchanged |
 | `passwordPolicy.resetTokenValidityDuration` | 7200 | — | 7200 | unchanged |

@@ -147,6 +147,12 @@ export function prodLeakProblems(
     if (env.MASTER_KEY_IPS.some((ip) => ip === '0.0.0.0/0' || ip === '::/0')) {
       problems.push(`MASTER_KEY_IPS may not be open to every address in ${env.APP_ENV}`);
     }
+    // Behind App Engine's proxy the socket address is loopback for every request (see app.ts).
+    if (!env.CLIENT_IP_HEADER && !env.TRUST_PROXY) {
+      problems.push(
+        `CLIENT_IP_HEADER must be set in ${env.APP_ENV}: without it every request comes from loopback and MASTER_KEY_IPS lets it in`,
+      );
+    }
   }
   return problems;
 }

@@ -64,7 +64,13 @@ if (!empty) {
 }
 
 const switchApp = await createApp(env, { logger: createLogger(env.LOG_LEVEL) });
-const server = createServer(switchApp.app);
+// Only this process reaches this 127.0.0.1 server, so it plays App Engine's part: it sets the
+// client IP header (CLIENT_IP_HEADER) that the staging config reads to allow the master key.
+const clientIpHeader = env.CLIENT_IP_HEADER;
+const server = createServer((req, res) => {
+  if (clientIpHeader) req.headers[clientIpHeader] = '127.0.0.1';
+  switchApp.app(req, res);
+});
 switchApp.attach(server);
 await new Promise<void>((resolve) => server.listen(port, '127.0.0.1', resolve));
 try {
