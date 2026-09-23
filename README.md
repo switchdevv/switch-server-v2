@@ -1,128 +1,132 @@
 # switch-server-v2
 
-The Switch backend: Parse Server 9 on Node 24, in strict TypeScript. It replaces `switch-server`
-(Parse Server 4.3, Node 14) behind the same URL, on the same database, and keeps the same wire
-protocol, so none of the clients changes: switch-food, switch-driver, switch-manager,
-switch-dashboard, switch-ops and switch-finance.
+The Switch backend. It runs Parse Server 9 on Node 24 and is written in TypeScript.
 
-**Status:** all 50 cloud functions, 11 triggers and the automatic-dispatch job are ported. The
-legacy parity harness (plan P1-7, Phase 2) is not built yet, so parity is still checked by
-hand-written tests. Deploys to staging from `stg` once staging is set up
-([docs/05-staging.md](docs/05-staging.md)); never to production.
+It replaces the old `switch-server` (Parse Server 4.3, Node 14). It uses the same database and
+answers requests exactly like the old server, so the apps and dashboards work with it unchanged:
+switch-food, switch-driver, switch-manager, switch-dashboard, switch-ops and switch-finance.
 
-Two rules come before everything else:
+**New here?** Start with the [onboarding guide](docs/00-onboarding.md). It takes you from an
+empty laptop to running everything locally and shipping a change to staging.
 
-- **Nothing breaks in the apps and dashboards.** Legacy behaviour is the contract, quirks
-  included. Every difference is listed in the Deviation Register
-  ([plan §9](docs/01-rewrite-plan.md#9-deviation-register)).
-- **Never test in production.** No test calls, accounts, orders or pushes against
-  `api.switchfood.net`. Outside production, the server refuses to boot with any production value
-  (`src/config/guards.ts`).
+## Status
+
+- All 50 cloud functions, 11 triggers and the automatic dispatch job are ported.
+- Staging is live and deploys automatically from the `stg` branch.
+- Production still runs the old `switch-server`. `main` is kept for the future production
+  pipeline; nothing deploys from it yet.
+- The automated comparison against the old server (plan P1-7) is not built yet. For now, tests
+  written by hand check that v2 behaves like the old server.
+
+## Good to know
+
+- **The old server's behaviour is the contract.** The apps depend on it, odd parts included
+  (error messages, misspellings, response shapes). Any intentional difference is listed in the
+  [Deviation Register](docs/01-rewrite-plan.md#9-deviation-register).
+- **We never test against production** (`api.switchfood.net`): no test accounts, orders, pushes
+  or calls. Use your local setup or staging. Outside production, the server refuses to start if
+  its config contains a production value (`src/config/guards.ts`).
 
 ## Quick start
 
-Requires Node 24, pnpm and Docker Desktop.
+You need Node 24, pnpm and Docker Desktop. The full setup is in the
+[onboarding guide](docs/00-onboarding.md).
 
 ```bash
 pnpm install
-pnpm dev:all
+pnpm setup:env   # once: creates .env.local with random local keys
+pnpm dev:all     # Docker + server + test data + every app and dashboard
 ```
 
-This starts Mongo and a local S3 (SeaweedFS) in Docker, the server on http://localhost:1337, seeds an empty
-database, and runs every app and dashboard against it. The server alone:
+The server runs on http://localhost:1337. Every seeded account uses the password `switch-dev`.
+To run the server alone:
 
 ```bash
-pnpm setup:env   # once: writes .env.local with random local keys
-pnpm stack:up    # Mongo (27018) + S3 (9000)
-pnpm dev         # http://localhost:1337, hot reload
-pnpm seed        # once: local test data (password: switch-dev)
+pnpm stack:up    # MongoDB (port 27018) and a local S3 (port 9000) in Docker
+pnpm dev         # the server, restarts when you save a file
+pnpm seed        # once: fills the empty local database with test data
 ```
-
-The full guide, seeded accounts and per-client setup are in
-[docs/04-local-dev.md](docs/04-local-dev.md).
 
 ## Scripts
 
-| Script                                | Does                                                                   |
+| Script                                | What it does                                                           |
 | ------------------------------------- | ---------------------------------------------------------------------- |
 | `pnpm dev`                            | Server with hot reload (`APP_ENV=local`, reads `.env.local`)           |
 | `pnpm dev:all`                        | Docker + server + seed + every client (`--only`, `--skip web\|mobile`) |
 | `pnpm stack:up` / `stack:down`        | Start / stop the local Docker services                                 |
 | `pnpm seed` / `db:reset`              | Seed an empty local database / empty it and seed again                 |
 | `pnpm test`                           | Unit + integration tests (in-memory MongoDB, fake outside services)    |
-| `pnpm test:unit` / `test:integration` | One suite                                                              |
+| `pnpm test:unit` / `test:integration` | One test suite                                                         |
 | `pnpm check`                          | Typecheck + lint + tests                                               |
-| `pnpm typecheck` / `lint` / `format`  | Quality checks (`format:check` in CI)                                  |
-| `pnpm build` / `start`                | Compile to `dist/` / run it (production entry)                         |
-| `pnpm setup:env`                      | Create `.env.local` from `.env.example` (never overwrites)             |
-| `pnpm fingerprint`                    | Hash values from stdin for the prod-leak guard                         |
-| `pnpm staging:secret`                 | Add a staging secret version (hidden prompts, boot checks) and pin it  |
-| `pnpm staging:preflight --project X`  | Check `.env.staging` against the staging project, as the deploy does   |
-| `pnpm seed:staging`                   | Seed the empty staging database (`SEED_PASSWORD`, 12+ characters)      |
+| `pnpm typecheck` / `lint` / `format`  | Quality checks (CI runs `format:check`)                                |
+| `pnpm build` / `start`                | Compile to `dist/` / run the compiled server                           |
+| `pnpm setup:env`                      | Create `.env.local` from `.env.example` (never overwrites it)          |
+| `pnpm fingerprint`                    | Hash values from stdin for the production-leak guard                   |
+| `pnpm staging:secret`                 | Add a new version of the staging secrets and pin it in `.env.staging`  |
+| `pnpm staging:preflight --project X`  | Check `.env.staging` against the staging project, like the deploy does |
+| `pnpm seed:staging`                   | Seed an empty staging database (`SEED_PASSWORD`, 12+ characters)       |
 
-CI (`.github/workflows/ci.yml`, every pull request) runs install, typecheck, lint, format check,
-tests, build, `pnpm audit` (high) and gitleaks. Every push to `stg` runs the same checks and then
-deploys to staging (`.github/workflows/deploy-staging.yml`).
+## CI and deploys
 
-## Layout
+- **Every pull request** runs `.github/workflows/ci.yml`: install, typecheck, lint, format check,
+  tests, build, `pnpm audit` and a secret scan (gitleaks).
+- **Every push to `stg`** runs the same checks, then deploys to staging
+  (`.github/workflows/deploy-staging.yml`). The new version gets traffic only after its `/health`
+  and `/config` answer. The five previous versions are kept for rollback.
+- **Production** has no workflow yet. It will be a manual, step-by-step switch described in the
+  [cutover runbook](docs/01-rewrite-plan.md#10-cutover-and-rollback-runbook-production).
 
-```
-src/
-  main.ts            process entry: config → secrets → guard → start → graceful shutdown
-  app.ts             createApp(env): Express + Parse Server mounted at / (testable factory)
-  config/            env schema (zod), .env loading, Secret Manager, prod-leak guard, Parse options
-  cloud/
-    index.ts         the registry: every function and trigger (a test pins the 50 + 11 names)
-    functions/       cloud functions, one file per legacy area
-    triggers/        the 11 triggers
-    cascade.ts       shared cascading deletes and manager ACL rewrites
-    errors.ts        legacy error strings, verbatim (misspellings are contract)
-    guards.ts        requireUser / requireStaff (legacy's exact role check)
-    notify.ts        FCM message builder, staff and driver notifications
-    wire-json.ts     keeps in-process cloud-code calls identical to legacy's HTTP round trip
-  domain/            pure rules: delivery fees, ratings, new-user defaults, i18n
-  jobs/              automatic dispatch (chooseDriver) on Agenda 4's document protocol
-  ports/ adapters/   every outside service behind an interface; real adapters and recording fakes
-  i18n/              translations.json, byte-identical to legacy
-test/                unit and integration tests (real Parse Server + in-memory MongoDB)
-tools/               dev:all, seed (local, staging), env setup, staging secret + deploy preflight
-docs/                plan, contract inventory, environments, local dev, staging, ADRs
-```
+The server runs on Google App Engine (`nodejs24`). CI builds it, and `.gcloudignore` uploads only
+`dist/`, the package manifests and the non-secret env files.
 
 ## Configuration
 
-Everything is set through environment variables, validated at boot (`src/config/env.ts`).
-`.env.example` documents each one. Per environment (`APP_ENV`):
+All settings are environment variables, checked when the server starts (`src/config/env.ts`).
+`.env.example` explains each one. `APP_ENV` picks the environment:
 
-| `APP_ENV`    | Values from                                                | Outside services                                                  |
-| ------------ | ---------------------------------------------------------- | ----------------------------------------------------------------- |
-| `local`      | `.env.local` (generated, gitignored)                       | fakes, printed in the server log                                  |
-| `test`       | `.env.test` (committed, fake)                              | fakes                                                             |
-| `staging`    | `.env.staging` + Secret Manager (pinned `SECRETS_VERSION`) | real: own Firebase/Pusher; production mail/SMS/maps/Spaces fenced |
-| `production` | `.env.prod` + Secret Manager (pinned `SECRETS_VERSION`)    | real                                                              |
+| `APP_ENV`    | Settings come from                      | Outside services (push, SMS, email…)                                     |
+| ------------ | --------------------------------------- | ------------------------------------------------------------------------ |
+| `local`      | `.env.local` (generated, not committed) | fakes, printed in the server log                                         |
+| `test`       | `.env.test` (committed, fake values)    | fakes                                                                    |
+| `staging`    | `.env.staging` + Google Secret Manager  | real; its own Firebase and Pusher, production mail/SMS/maps/files fenced |
+| `production` | `.env.prod` + Google Secret Manager     | real                                                                     |
 
-Committed env files hold no secrets; a test fails if one does. Production refuses to boot if a
-secret arrives from the plain environment instead of Secret Manager.
+Committed env files never contain secrets (a test checks this). Secrets live in Secret Manager,
+and `.env.staging` / `.env.prod` pin which version the server reads (`SECRETS_VERSION`).
 
-## Deployment
+## Code layout
 
-App Engine `nodejs24`. The build runs in CI; `.gcloudignore` uploads only `dist/`, the manifests
-and the non-secret env files, and App Engine installs the production dependencies with pnpm.
-
-- **Staging** (its own project): automatic from `stg` (`main` is reserved for production). The tested build goes out as a new version
-  without traffic, takes the traffic after its `/health` and `/config` answer, and the newest five
-  old versions stay for rollback. Setup and rollback: [docs/05-staging.md](docs/05-staging.md).
-- **Production** (same service as legacy): no workflow. A new version with `--no-promote`, then
-  manual traffic moves (canary, rollback) in the cutover runbook
-  ([plan §10](docs/01-rewrite-plan.md#10-cutover-and-rollback-runbook-production)).
+```
+src/
+  main.ts            entry point: config → secrets → safety checks → start → clean shutdown
+  app.ts             createApp(env): Express + Parse Server (also used by the tests)
+  config/            env schema, .env loading, Secret Manager, production-leak guard, Parse options
+  cloud/
+    index.ts         the list of every cloud function and trigger (a test pins the 50 + 11 names)
+    functions/       cloud functions, one file per area
+    triggers/        the 11 triggers
+    cascade.ts       shared cascading deletes and manager permission updates
+    errors.ts        error messages, copied word for word from the old server
+    guards.ts        requireUser / requireStaff
+    notify.ts        push messages for staff and drivers
+    wire-json.ts     makes in-process cloud calls return exactly what an HTTP call would
+  domain/            pure business rules: delivery fees, ratings, new-user defaults, translations
+  jobs/              automatic dispatch (chooseDriver)
+  ports/ adapters/   every outside service behind an interface, with real and fake versions
+  i18n/              translations.json, identical to the old server's
+test/                unit and integration tests (real Parse Server + in-memory MongoDB)
+tools/               dev:all, seed scripts, env setup, staging secret and deploy checks
+docs/                onboarding, plan, contract, environments, local dev, staging, decisions
+```
 
 ## Docs
 
-1. [Rewrite plan](docs/01-rewrite-plan.md): why, target stack, Parse option mapping, verification,
-   phases, Deviation Register, cutover and rollback.
-2. [Contract inventory](docs/02-contract-inventory.md): every function, trigger, payload and quirk
-   that must not change.
-3. [Environments](docs/03-environments-and-dev-setup.md): `.env` files, variables, secrets, staging.
-4. [Local development](docs/04-local-dev.md): the whole platform on your Mac.
-5. [Staging](docs/05-staging.md): CI/CD, one-time setup step by step, secrets, rollback.
-6. [ADRs](docs/adr/): decisions, starting with the dispatch job store.
+0. [Onboarding](docs/00-onboarding.md): new developer setup, from zero to a staging deploy.
+1. [Rewrite plan](docs/01-rewrite-plan.md): why v2 exists, the target stack, the phases, the
+   Deviation Register, and the production cutover and rollback.
+2. [Contract inventory](docs/02-contract-inventory.md): every function, trigger and response
+   shape that must not change.
+3. [Environments](docs/03-environments-and-dev-setup.md): `.env` files, every variable, secrets.
+4. [Local development](docs/04-local-dev.md): the whole platform on your Mac, seeded accounts.
+5. [Staging](docs/05-staging.md): how staging was set up, deploys, rollback, troubleshooting.
+6. [Decisions (ADRs)](docs/adr/): design decisions and why they were made.

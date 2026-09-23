@@ -6,6 +6,7 @@ import { orderFoodFunctions } from './functions/order-food.js';
 import { orderManagerFunctions } from './functions/order-manager.js';
 import { paymentFunctions } from './functions/payment.js';
 import { staffAccessFunctions } from './functions/staff-access.js';
+import { staffAdminFunctions } from './functions/staff-admin.js';
 import { staffAuthFunctions } from './functions/staff-auth.js';
 import { staffCatalogueFunctions } from './functions/staff-catalogue.js';
 import { staffOrderFunctions } from './functions/staff-orders.js';
@@ -27,6 +28,7 @@ const TABLES: FunctionTable[] = [
   staffCatalogueFunctions,
   staffOrderFunctions,
   staffAccessFunctions,
+  staffAdminFunctions,
   staffRealtimeFunctions,
 ];
 

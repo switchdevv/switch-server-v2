@@ -3,26 +3,10 @@
 // Both consoles read the error code, so these throw Parse.Errors, not CLOUD_ERRORS strings.
 // The boundary that stops an account granting itself is `beforeSave _User` (triggers/index.ts).
 import type { CloudDeps, FunctionHandler, FunctionTable } from '../context.js';
+import { isStaffAccount, staffTypeOf } from '../staff-accounts.js';
 
 /** The `_User` Boolean each grant writes. Ignored for admins, who have access by role. */
 export const ACCESS_FIELDS = { ops: 'opsAccess', finance: 'financeAccess' } as const;
-
-const STAFF_TYPES = ['staff', 'admin'];
-
-function staffTypeOf(value: unknown): string {
-  return String(value ?? '')
-    .trim()
-    .toLowerCase();
-}
-
-/** The consoles' `isStaffAccount`: a Staff/Admin `staffType` and a staff/admin `appType`. */
-export function isStaffAccount(staffType: unknown, appType: unknown): boolean {
-  return (
-    STAFF_TYPES.includes(staffTypeOf(staffType)) &&
-    Array.isArray(appType) &&
-    appType.some((type) => STAFF_TYPES.includes(type as string))
-  );
-}
 
 function setAccess(console: keyof typeof ACCESS_FIELDS, label: string): FunctionHandler {
   const field = ACCESS_FIELDS[console];

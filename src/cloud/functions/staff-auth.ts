@@ -2,7 +2,7 @@
 import { newUserFields } from '../../domain/user-defaults.js';
 import { detach, type FunctionTable } from '../context.js';
 import { CLOUD_ERRORS } from '../errors.js';
-import { findRole, requireStaff } from '../guards.js';
+import { findRole, requireAdmin } from '../guards.js';
 
 /** Written once, when `loginStaff` bootstraps an empty database. Never at boot (plan R4). */
 export const BOOTSTRAP_CONFIG = {
@@ -65,7 +65,8 @@ export const staffAuthFunctions: FunctionTable = {
   },
 
   async updateConfigs(req, deps) {
-    await requireStaff(req, deps);
+    // D-24: admin-only. Only switch-dashboard's admin-only Configs page and switch-admin call it.
+    await requireAdmin(req, deps);
     const { configs } = req.params as Record<string, unknown>;
     if (!configs) throw CLOUD_ERRORS.PARAMS_MISSING;
     // Q-9: the second argument is the SDK's masterKeyOnly map, so this also stores

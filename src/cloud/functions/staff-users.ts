@@ -3,8 +3,9 @@ import { newUserFields } from '../../domain/user-defaults.js';
 import { destroyUserContents } from '../cascade.js';
 import { type CloudDeps, detach, type FunctionTable, type ParseUser } from '../context.js';
 import { CLOUD_ERRORS } from '../errors.js';
-import { requireStaff } from '../guards.js';
+import { callerIsAdmin, requireStaff } from '../guards.js';
 import { CLASSES, pointer } from '../pointers.js';
+import { addsStaffAppType, isStaffTagged, staffTypeOf } from '../staff-accounts.js';
 import { deleteFileByName } from './files.js';
 
 /** Legacy adds users to the Staff role without awaiting the save. */
@@ -15,6 +16,27 @@ async function addToStaffRole(deps: CloudDeps, user: ParseUser): Promise<void> {
   const staffRole = (await query.first({ useMasterKey: true }))!;
   staffRole.getUsers().add(user);
   detach(deps, 'staffRole.save', staffRole.save(null, { useMasterKey: true }));
+}
+
+/**
+ * D-24: a staff account is an admin's to write. Loads every target first, so a batch is refused
+ * whole rather than after half of it ran. A non-staff account (a driver, a customer, a manager)
+ * stays open to any Staff-role caller, exactly as in legacy — that is switch-ops' daily work.
+ */
+async function refuseStaffTargetsUnlessAdmin(
+  deps: CloudDeps,
+  caller: ParseUser,
+  ids: unknown[],
+): Promise<void> {
+  const { Parse } = deps;
+  const targets = await new Parse.Query(Parse.User)
+    .containedIn('objectId', ids as string[])
+    .limit(ids.length)
+    .find({ useMasterKey: true });
+  const touchesStaff = targets.some((user) =>
+    isStaffTagged(user.get('staffType'), user.get('appType')),
+  );
+  if (touchesStaff && !(await callerIsAdmin(deps, caller))) throw CLOUD_ERRORS.ADMIN_REQUIRED;
 }
 
 export const staffUserFunctions: FunctionTable = {
@@ -50,7 +72,7 @@ export const staffUserFunctions: FunctionTable = {
 
   async addUser(req, deps) {
     const { Parse } = deps;
-    await requireStaff(req, deps);
+    const caller = await requireStaff(req, deps);
     const { fullname, username, password, email, appType, cityId, enabled, staffType, phone } =
       req.params as Record<string, unknown>;
     if (
@@ -63,6 +85,10 @@ export const staffUserFunctions: FunctionTable = {
       enabled === undefined
     ) {
       throw CLOUD_ERRORS.PARAMS_MISSING;
+    }
+    // D-24: creating a staff account (a role, or the staff app) is an admin's.
+    if (isStaffTagged(staffType, appType) && !(await callerIsAdmin(deps, caller))) {
+      throw CLOUD_ERRORS.ADMIN_REQUIRED;
     }
     const signedUser = new Parse.User();
     const fields = newUserFields({
@@ -86,7 +112,7 @@ export const staffUserFunctions: FunctionTable = {
 
   async editUser(req, deps) {
     const { Parse } = deps;
-    await requireStaff(req, deps);
+    const caller = await requireStaff(req, deps);
     const { id, fullname, email, phone, appType, cityId, staffType, password } =
       req.params as Record<string, unknown>;
     if (!id || !fullname || !email || !phone || !appType || !cityId)
@@ -94,6 +120,18 @@ export const staffUserFunctions: FunctionTable = {
     const userQuery = new Parse.Query(Parse.User);
     userQuery.equalTo('objectId', id);
     const user = (await userQuery.first({ useMasterKey: true }))!;
+    // D-24: a staff account, a change of role, or a grant of the staff app is an admin's. An
+    // omitted `staffType` (undefined) changes nothing, so switch-ops editing a driver passes.
+    const changesRole =
+      staffType !== undefined && staffTypeOf(staffType) !== staffTypeOf(user.get('staffType'));
+    if (
+      (isStaffTagged(user.get('staffType'), user.get('appType')) ||
+        changesRole ||
+        addsStaffAppType(user.get('appType'), appType)) &&
+      !(await callerIsAdmin(deps, caller))
+    ) {
+      throw CLOUD_ERRORS.ADMIN_REQUIRED;
+    }
     user.set('fullname', fullname);
     user.set('phone', phone);
     user.set('appType', appType);
@@ -111,9 +149,10 @@ export const staffUserFunctions: FunctionTable = {
 
   async deleteUsers(req, deps) {
     const { Parse } = deps;
-    await requireStaff(req, deps);
+    const caller = await requireStaff(req, deps);
     const { ids } = req.params as Record<string, unknown>;
     if (!ids) throw CLOUD_ERRORS.PARAMS_MISSING;
+    await refuseStaffTargetsUnlessAdmin(deps, caller, ids as unknown[]);
     for (const id of ids as unknown[]) {
       const query = new Parse.Query(Parse.User);
       query.equalTo('objectId', id);
@@ -127,9 +166,10 @@ export const staffUserFunctions: FunctionTable = {
 
   async toggleEnableUsers(req, deps) {
     const { Parse } = deps;
-    await requireStaff(req, deps);
+    const caller = await requireStaff(req, deps);
     const { ids } = req.params as Record<string, unknown>;
     if (!ids) throw CLOUD_ERRORS.PARAMS_MISSING;
+    await refuseStaffTargetsUnlessAdmin(deps, caller, ids as unknown[]);
     for (const id of ids as unknown[]) {
       const query = new Parse.Query(Parse.User);
       query.equalTo('objectId', id);

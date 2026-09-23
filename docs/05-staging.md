@@ -370,8 +370,11 @@ to testers' phones.
 
 - **Production.** No workflow deploys it. The cutover runbook is plan §10: manual, `--no-promote`,
   traffic split, after staging sign-off.
-- **Client builds for staging.** The apps and dashboards pointed at the staging URL (and, for push
-  and realtime, the staging Firebase and Pusher keys) are a separate change, like the `:local`
-  scripts. Until then only uncommitted edits point a client at staging (env doc §5.6).
+- **Client builds for staging.** Each client has its own: ops and finance deploy from their `stg`
+  branch (`docs/staging.md` in each repo). The Android apps build a signed `stg` APK
+  (`<app>.stg` package, the staging Firebase and Pusher apps) with `npm run android:stg`
+  (`docs/staging.md` in switch-food, switch-driver, switch-manager). Once those APKs are signed,
+  `SMS_RETRIEVER_HASH_*` above should hold their hashes (the build prints them). iOS and the
+  dashboard have no staging build yet.
 - **Plan Phase 4 itself**: the parity suite against staging, `TRUST_PROXY` (P4-3), real logins
   (P4-4), the load test (P4-5) and the client checklist (Appendix A).

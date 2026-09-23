@@ -27,6 +27,7 @@ This starts, in order:
 | switch-finance | http://localhost:3000 | `npm run dev:local` |
 | switch-dashboard | http://localhost:3010 | `npm run dev:local` |
 | switch-ops | http://localhost:3020 | `npm run dev:local` |
+| switch-admin | http://localhost:3030 | `npm run dev:local` |
 | switch-food Metro | `:8081` | `npm run start:local` |
 | switch-driver Metro | `:8082` | `npm run start:local` |
 | switch-manager Metro | `:8083` | `npm run start:local` |
@@ -55,7 +56,7 @@ it). Log in with the username:
 
 | Username | Who | Use in |
 |---|---|---|
-| `admin` | Admin (staff) | dashboard, ops, finance |
+| `admin` | Admin (staff) | dashboard, ops, finance, admin |
 | `ops` | Ops staff with ops and finance access | dashboard, ops, finance |
 | `manager.roma`, `manager.burger`, `manager.couscous` | Restaurant managers | switch-manager |
 | `driver.amine`, `driver.sara`, `driver.yacine` | Online drivers 0.5 / 2 / 4 km from Pizza Roma | switch-driver |
@@ -77,7 +78,7 @@ production, untouched.
 
 | Client | Script | Mechanism |
 |---|---|---|
-| switch-ops, switch-finance | `dev:local` | `NEXT_PUBLIC_PARSE_SERVER_URL=http://localhost:1337` overrides `.env.local`; builds into `.next/local` so no production-compiled code is reused. |
+| switch-ops, switch-finance, switch-admin | `dev:local` | `NEXT_PUBLIC_PARSE_SERVER_URL=http://localhost:1337` overrides `.env.local`; builds into `.next/local` so no production-compiled code is reused. |
 | switch-dashboard | `dev:local` | `VITE_PARSE_SERVER_URL`, read only when `import.meta.env.DEV`. |
 | switch-food, -driver, -manager | `start:local`, `android:local`, `ios:local` | Metro gets `SWITCH_LOCAL_SERVER_URL`; a Babel step inlines it into `src/configs/index.js`, which uses it only when `__DEV__`. Local mode has its own Metro cache. |
 

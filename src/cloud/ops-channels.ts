@@ -2,7 +2,7 @@
 // because anyone holding the public key can read a public channel: a browser may only join one
 // after `authorizeOpsChannel` signs it for a signed-in ops account.
 import type { CloudDeps, ParseUser } from './context.js';
-import { isStaffAccount } from './functions/staff-access.js';
+import { isStaffAccount } from './staff-accounts.js';
 
 /** Every region's events: admins only. */
 export const OPS_ALL_CHANNEL = 'private-ops';

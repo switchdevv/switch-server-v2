@@ -158,6 +158,21 @@ answers both with `141 Invalid function`, which the consoles show as "not deploy
 `authorizeOpsChannel({ socketId, channelName })` (switch-ops) signs its private Pusher channels
 (`private-ops`, `private-ops-city-<cityId>`). `assignDriver` unsets the assigned driver's key in `driverDeclines`.
 
+**Added in v2 for switch-admin** (D-24): guard **A** — guard S, then the caller's current row
+must be an enabled admin, else `141 ADMIN_REQUIRED`. It now also applies to `updateConfigs`
+(always), `addUser` (creating a staff account), `editUser` (a staff-tagged target, a `staffType`
+change, or staff/admin added to `appType`) and `deleteUsers` / `toggleEnableUsers` (any
+staff-tagged target in the batch). New functions, all guard A:
+
+| Function | Params | Returns | Effect |
+|---|---|---|---|
+| `signOutStaff` | `userId` | `{ objectId, sessions }` | Destroys every `_Session` of a staff-tagged account. |
+| `removeStaff` | `userId` | `{ objectId, sessions }` | Removes it from role `Staff`, unsets `staffType`, `opsAccess`, `financeAccess`, drops staff/admin from `appType`, destroys its sessions. The account stays. |
+| `recountRatings` | `restaurantIds?`, `driverIds?` (≤100 in all) | `{ restaurants, drivers }` | Recounts rating totals from the `Review` rows left (after `deleteReviews`). |
+
+Refusals: `PARAMS_MISSING`, `SELF_NOT_ALLOWED` (the caller as target), `NOT_STAFF_ACCOUNT`,
+`USER_DOES_NOT_EXISTS`.
+
 ### 3.3 Triggers (11)
 
 | Trigger | Legacy behaviour |

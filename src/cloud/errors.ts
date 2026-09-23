@@ -32,4 +32,8 @@ export const CLOUD_ERRORS = {
   EMAIL_MISSING: 'EMAIL_MISSING',
   PHONE_NUMBER_USED: 'PHONE_NUMBER_USED',
   DISTANCE_ERROR: 'DISTANCE_ERROR',
+  // Not in legacy: the admin guards (D-24). Thrown the same way, as 141 + string.
+  ADMIN_REQUIRED: 'ADMIN_REQUIRED',
+  SELF_NOT_ALLOWED: 'SELF_NOT_ALLOWED',
+  NOT_STAFF_ACCOUNT: 'NOT_STAFF_ACCOUNT',
 } as const;

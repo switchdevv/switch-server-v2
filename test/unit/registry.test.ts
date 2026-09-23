@@ -67,12 +67,15 @@ const LEGACY_TRIGGERS = [
   'afterSave Message',
   'afterSave Review',
 ];
-// Additions over legacy, each a deliberate deviation (01-rewrite-plan.md §9, D-22, D-23).
+// Additions over legacy, each a deliberate deviation (01-rewrite-plan.md §9, D-22, D-23, D-24).
 const ADDED_FUNCTIONS = [
   'setOpsAccess',
   'setFinanceAccess',
   'declineDriver',
   'authorizeOpsChannel',
+  'signOutStaff',
+  'removeStaff',
+  'recountRatings',
 ];
 const ADDED_TRIGGERS = ['beforeSave _User'];
 
