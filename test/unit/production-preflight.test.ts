@@ -92,10 +92,8 @@ describe('production deploy preflight (tools/deploy/production-preflight.ts)', (
     ]);
   });
 
-  it('the committed .env.prod only lacks what the setup fills in', () => {
+  it('the committed .env.prod is ready once its pinned secret version exists', () => {
     const committed = parseDotenv(readFileSync('.env.prod', 'utf8'));
-    const problems = productionProblems(committed, { ...facts, secretState: undefined });
-    for (const p of problems)
-      expect(p).toMatch(/SECRETS_VERSION is not set|PUSHER_APP_ID and PUSHER_KEY/);
+    expect(productionProblems(committed, facts)).toEqual([]);
   });
 });
