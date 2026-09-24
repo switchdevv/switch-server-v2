@@ -199,7 +199,7 @@ For iOS only, also run `npx pod-install` inside each phone app folder.
 | Branch | Meaning |
 |---|---|
 | `stg` | What runs on staging. **Every push to `stg` deploys to staging.** Start your work from here. |
-| `main` | Kept for the future production pipeline. Nothing deploys from it today. |
+| `main` | Production. Nothing deploys on a push: production deploys are manual runs from `main` ([06-production.md](06-production.md)). |
 
 ---
 
@@ -503,3 +503,4 @@ password of the test accounts (`admin`, `ops`, `driver.sara`, `customer`, …). 
 - [Environments](03-environments-and-dev-setup.md): every setting and what it does.
 - [Staging](05-staging.md): how staging was built, if it ever needs to be rebuilt.
 - [Rewrite plan](01-rewrite-plan.md): why v2 exists and what is left to do before production.
+- [Production](06-production.md): the production pipeline, the switch from the old server, rollback.

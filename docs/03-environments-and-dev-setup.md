@@ -269,40 +269,35 @@ Set up and operated by [05-staging.md](05-staging.md) (step by step). In short:
 
 ## 7. Production deploy mechanics
 
-`app.yaml` (initial values mirror legacy's scaling, so capacity is identical at cutover):
+Set up and operated by [06-production.md](06-production.md) (step by step). In short:
 
-```yaml
-runtime: nodejs24
-instance_class: F2            # OD-8, confirmed by the Phase 4 load test
-entrypoint: node --enable-source-maps dist/main.js
-inbound_services:
-  - warmup
-env_variables:
-  APP_ENV: production
-automatic_scaling:
-  min_instances: 1
-  max_instances: 5
-  target_cpu_utilization: 0.9
-  max_concurrent_requests: 70
-  target_throughput_utilization: 0.9
-  min_pending_latency: 30ms
-  max_pending_latency: automatic
-```
-
+- **Where:** switch-proj's App Engine app, service `default`, as `v2-…` versions next to legacy's
+  nodejs14 version. `api.switchfood.net` keeps its DNS and domain mapping; the switch from legacy
+  is a traffic move inside the service, and so is a rollback.
+- **`app.yaml`:** `nodejs24`, F2 (OD-8), warmup requests, and `min_instances: 0` +
+  `min_idle_instances: 1`. Only the version with most of the traffic keeps an idle instance, so a
+  version deployed without traffic, or kept for rollback, doesn't run a dispatch worker against
+  the production database. Legacy's `min_instances: 1` would.
 - **Build happens in CI, not on App Engine.** CI runs the full pipeline, produces `dist/`, then
   `gcloud app deploy --no-promote`. `package.json` sets `"gcp-build": ""`, so the buildpack does
   not run `build` itself (per Google's buildpack docs, a `gcp-build` script replaces the default
   `build` step). The buildpack still runs `pnpm install` for production dependencies from
-  `pnpm-lock.yaml`. `engines.node` must match `nodejs24` and `engines.pnpm` pins pnpm. **P1-9
-  proves this on staging before it matters.**
+  `pnpm-lock.yaml`. `engines.node` must match `nodejs24` and `engines.pnpm` pins pnpm. Staging
+  proves this on every deploy.
 - `.gcloudignore` is an allowlist: everything ignored except `dist/`, `package.json`,
   `pnpm-lock.yaml`, `app.yaml`, `.env.prod`, `.env.staging`. Never `.env.local`, `src/`, tests,
   `.legacy/`.
-- The prod deploy workflow is manual (`workflow_dispatch`), runs from a signed tag, needs your
-  approval (GitHub environment protection), and **always** deploys with `--no-promote`. Traffic
-  moves are the manual runbook steps in plan §10, never part of the deploy job.
-
----
+- **Two manual workflows, from `main` only.** `deploy-production.yml` runs ci, the production
+  preflight (`tools/deploy/production-preflight.ts`) and `gcloud app deploy app.yaml
+  --no-promote`, then checks `/health` on the version's own URL. It never moves traffic.
+  `promote-production.yml` moves it (100%, or a 10%/50% canary split by IP), and is also the
+  rollback. GitHub Free has no environment approvals on private repositories, so the gate is on
+  Google's side: the Workload Identity provider only accepts a `workflow_dispatch` run on
+  `refs/heads/main` of this repository's id.
+- **Secrets:** `pnpm production:secret` adds the version of `switch-server-env` and pins it in
+  `.env.prod`. It checks that every identity in it is production's own (the inverse of the
+  prod-leak guard, `productionIdentityProblems` in `src/config/guards.ts`), including legacy's
+  master key while legacy's version exists.
 
 ## 8. `package.json` essentials (target)
 

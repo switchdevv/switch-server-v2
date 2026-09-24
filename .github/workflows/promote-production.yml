@@ -1,0 +1,205 @@
+# Moves production traffic. Manual only: Actions → promote-production → Run workflow, on main,
+# with a version deploy-production made (or legacy's version, to roll back to it) and a share:
+#
+# - 100: the whole of production moves to that version (the switch, a release, a rollback).
+# - 10 / 50: a canary. That version gets the share, the version serving now keeps the rest, split
+#   by client IP so each phone or office stays on one version.
+#
+# The version is woken up and must answer /health before it gets any traffic. After a move to 100%,
+# old v2 versions without traffic are deleted (the newest 3 are kept); legacy's version, whatever
+# its runtime, is never touched here. docs/06-production.md.
+name: promote-production
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: App Engine version to move traffic to (deploy-production's summary, or legacy's id)
+        required: true
+        type: string
+      percent:
+        description: Share of production traffic for it
+        required: true
+        type: choice
+        options: ['100', '50', '10']
+        default: '100'
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash # explicit: adds pipefail
+
+concurrency:
+  group: production-traffic
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write # Workload Identity Federation: GitHub holds no Google key
+    env:
+      PROJECT_ID: ${{ vars.PROD_GCP_PROJECT_ID }}
+      WIF_PROVIDER: ${{ vars.PROD_GCP_WIF_PROVIDER }}
+      DEPLOY_SA: ${{ vars.PROD_GCP_DEPLOY_SA }}
+      VERSION: ${{ inputs.version }}
+      PERCENT: ${{ inputs.percent }}
+      KEEP_VERSIONS: 3
+    steps:
+      - name: Check the branch, the inputs and the repository variables
+        run: |
+          if [ "$GITHUB_REF" != refs/heads/main ]; then
+            echo "::error::Production traffic moves only from main (this run is on $GITHUB_REF). Google refuses any other branch."
+            exit 1
+          fi
+          if ! [[ "$VERSION" =~ ^[a-z0-9][a-z0-9-]{0,62}$ ]]; then
+            echo "::error::\"$VERSION\" is not an App Engine version id."
+            exit 1
+          fi
+          missing=""
+          [ -n "$PROJECT_ID" ] || missing="$missing PROD_GCP_PROJECT_ID"
+          [ -n "$WIF_PROVIDER" ] || missing="$missing PROD_GCP_WIF_PROVIDER"
+          [ -n "$DEPLOY_SA" ] || missing="$missing PROD_GCP_DEPLOY_SA"
+          if [ -n "$missing" ]; then
+            echo "::error::Set these repository variables:$missing (docs/06-production.md, step 8)."
+            exit 1
+          fi
+      - uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ vars.PROD_GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.PROD_GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.PROD_GCP_DEPLOY_SA }}
+      - uses: google-github-actions/setup-gcloud@v3
+      - name: Read the version and what serves production now
+        id: before
+        run: |
+          if ! info=$(gcloud app versions describe "$VERSION" --service=default \
+            --project="$PROJECT_ID" --format='value(versionUrl,runtime)'); then
+            echo "::error::No version $VERSION in the default service. gcloud app versions list --service=default --project=$PROJECT_ID"
+            exit 1
+          fi
+          read -r url runtime <<< "$info"
+          echo "version_url=$url" >> "$GITHUB_OUTPUT"
+          echo "runtime=$runtime" >> "$GITHUB_OUTPUT"
+          gcloud app services describe default --project="$PROJECT_ID" --format=json \
+            | jq -r '.split.allocations | to_entries | sort_by(-.value) | .[] | "\(.key) \(.value)"' \
+            > "$RUNNER_TEMP/before"
+          echo "serving=$(awk '{ printf "%s%s=%s", sep, $1, $2; sep=", " }' "$RUNNER_TEMP/before")" \
+            >> "$GITHUB_OUTPUT"
+          # The version that keeps the rest of a canary: the biggest share that isn't this one.
+          current=$(awk -v v="$VERSION" '$1 != v { print $1; exit }' "$RUNNER_TEMP/before")
+          echo "current=$current" >> "$GITHUB_OUTPUT"
+          echo "$VERSION ($runtime) at $url. Serving now:"
+          cat "$RUNNER_TEMP/before"
+      - name: Wake ${{ inputs.version }} and check /health
+        env:
+          URL: ${{ steps.before.outputs.version_url }}
+        run: |
+          # A version without traffic has no instance: the first request starts one (up to a few
+          # minutes for v2: Secret Manager, MongoDB, Parse). Only /health, nothing written.
+          ok=""
+          for _ in $(seq 36); do
+            code=$(curl -s -o "$RUNNER_TEMP/health.json" -w '%{http_code}' --max-time 20 \
+              "$URL/health" || true)
+            if [ "$code" = 200 ] && grep -q '"status":"ok"' "$RUNNER_TEMP/health.json"; then
+              ok=1
+              break
+            fi
+            echo "not ready yet (HTTP ${code:-none})"
+            sleep 5
+          done
+          if [ -z "$ok" ]; then
+            echo "::error::$VERSION never answered /health: no traffic was moved. Log: gcloud app logs read --project=$PROJECT_ID --service=default --version=$VERSION --limit=100"
+            exit 1
+          fi
+      - name: Move ${{ inputs.percent }}% of production to ${{ inputs.version }}
+        env:
+          CURRENT: ${{ steps.before.outputs.current }}
+          RUNTIME: ${{ steps.before.outputs.runtime }}
+        run: |
+          if [ "$PERCENT" = 100 ]; then
+            # --migrate warms the target before it takes the traffic (v2 has warmup requests;
+            # legacy's version doesn't, so a rollback to it moves at once). If App Engine refuses a
+            # migration, the move is made at once: the version was just checked healthy.
+            if [ "$RUNTIME" = nodejs24 ] && gcloud app services set-traffic default \
+              --splits="$VERSION=1" --migrate --project="$PROJECT_ID" --quiet; then
+              echo "Migrated all traffic to $VERSION."
+            else
+              [ "$RUNTIME" = nodejs24 ] && echo "::warning::Migration refused; moving at once."
+              gcloud app services set-traffic default --splits="$VERSION=1" \
+                --project="$PROJECT_ID" --quiet
+            fi
+          else
+            if [ -z "$CURRENT" ]; then
+              echo "::error::$VERSION already has all the traffic: there is no other version to share it with."
+              exit 1
+            fi
+            share=$(awk -v p="$PERCENT" 'BEGIN { printf "%.2f %.2f", p / 100, 1 - p / 100 }')
+            read -r mine theirs <<< "$share"
+            gcloud app services set-traffic default --split-by=ip \
+              --splits="$VERSION=$mine,$CURRENT=$theirs" --project="$PROJECT_ID" --quiet
+          fi
+      - name: Check the new split
+        id: after
+        run: |
+          # A migration can still be finishing: give the split two minutes to settle.
+          for _ in $(seq 24); do
+            gcloud app services describe default --project="$PROJECT_ID" --format=json \
+              | jq -r '.split.allocations | to_entries | sort_by(-.value) | .[] | "\(.key) \(.value)"' \
+              > "$RUNNER_TEMP/after"
+            got=$(awk -v v="$VERSION" '$1 == v { print $2 }' "$RUNNER_TEMP/after")
+            # IP splits are approximate: within 2 points is the share asked for.
+            if awk -v g="${got:-0}" -v p="$PERCENT" 'BEGIN { d = g - p / 100; exit !(d < 0.02 && d > -0.02) }'; then
+              break
+            fi
+            sleep 5
+          done
+          cat "$RUNNER_TEMP/after"
+          echo "serving=$(awk '{ printf "%s%s=%s", sep, $1, $2; sep=", " }' "$RUNNER_TEMP/after")" \
+            >> "$GITHUB_OUTPUT"
+          if ! awk -v g="${got:-0}" -v p="$PERCENT" 'BEGIN { d = g - p / 100; exit !(d < 0.02 && d > -0.02) }'; then
+            echo "::error::$VERSION has ${got:-no} share, not $PERCENT%. Check: gcloud app services describe default --project=$PROJECT_ID"
+            exit 1
+          fi
+      - name: Delete old v2 versions (keeps the newest ${{ env.KEEP_VERSIONS }}, never legacy)
+        if: inputs.percent == '100'
+        continue-on-error: true # production is already on the new version
+        run: |
+          # Only nodejs24 versions (v2) without traffic. Legacy's version is deleted by hand, once,
+          # at decommission (docs/06-production.md): it can never be redeployed.
+          gcloud app versions list --service=default --project="$PROJECT_ID" \
+            --sort-by='~version.createTime' --format='value(id,traffic_split,version.runtime)' |
+            awk '$2 + 0 == 0 && $3 == "nodejs24" { print $1 }' |
+            tail -n +$((KEEP_VERSIONS + 1)) > "$RUNNER_TEMP/old"
+          if [ -s "$RUNNER_TEMP/old" ]; then
+            xargs gcloud app versions delete --service=default --project="$PROJECT_ID" --quiet \
+              < "$RUNNER_TEMP/old"
+          else
+            echo "Nothing to delete."
+          fi
+      - name: Summary
+        if: always()
+        env:
+          STATUS: ${{ job.status }}
+          BEFORE: ${{ steps.before.outputs.serving }}
+          AFTER: ${{ steps.after.outputs.serving }}
+          CURRENT: ${{ steps.before.outputs.current }}
+        run: |
+          {
+            echo "### Production traffic: $STATUS"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Asked | \`$VERSION\` at $PERCENT% |"
+            echo "| Before | \`${BEFORE:-n/a}\` |"
+            echo "| After | \`${AFTER:-unchanged}\` |"
+            echo
+            if [ -n "$CURRENT" ]; then
+              echo "Roll back: run promote-production again with version \`$CURRENT\` at 100%, or"
+              echo "\`gcloud app services set-traffic default --splits=$CURRENT=1 --project=$PROJECT_ID\`"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

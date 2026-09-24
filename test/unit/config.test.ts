@@ -2,7 +2,12 @@ import { readFileSync } from 'node:fs';
 import { parseEnv as parseDotenv } from 'node:util';
 import { describe, expect, it } from 'vitest';
 import { type Env, parseEnv, SECRET_KEYS } from '../../src/config/env.js';
-import { fingerprint, PROD_FINGERPRINTS, prodLeakProblems } from '../../src/config/guards.js';
+import {
+  fingerprint,
+  PROD_FINGERPRINTS,
+  prodLeakProblems,
+  productionIdentityProblems,
+} from '../../src/config/guards.js';
 import { appEnvFrom, readEnvFile } from '../../src/config/load.js';
 import { buildParseOptions, trustProxySetting } from '../../src/config/parse-options.js';
 
@@ -295,6 +300,63 @@ describe('staging (docs/05-staging.md)', () => {
     ).toThrow(/SHARED_PROD_CREDENTIALS/);
     expect(() => parseEnv(stagingRaw({ SHARED_PROD_CREDENTIALS: 'mail,firebase' }))).toThrow(
       /SHARED_PROD_CREDENTIALS/,
+    );
+  });
+});
+
+describe('production secret identity (pnpm production:secret, docs/06-production.md)', () => {
+  // Stand-ins for the production values, as in the staging tests above.
+  const PROD = { dbHost: 'prod-cluster.example.net', masterKey: 'legacy-master-key' };
+  const fps = {
+    ...PROD_FINGERPRINTS,
+    dbHost: fingerprint(PROD.dbHost),
+    masterKey: fingerprint(PROD.masterKey),
+  };
+  const firebase = (projectId: string) =>
+    JSON.stringify({ type: 'service_account', project_id: projectId, private_key_id: 'k1' });
+  /** `.env.prod` plus a secret payload of production's own identities. */
+  const prodEnv = (patch: Record<string, string> = {}) =>
+    parseEnv({
+      ...parseDotenv(readFileSync('.env.prod', 'utf8')),
+      APP_ENV: 'production',
+      SECRETS_VERSION: '1',
+      PARSE_MASTER_KEY: PROD.masterKey,
+      PARSE_MAINTENANCE_KEY: 'new-maintenance-key',
+      DATABASE_URI: `mongodb+srv://v2:p@${PROD.dbHost}/switchDB`,
+      FIREBASE_SERVICE_ACCOUNT: firebase('switch-proj'),
+      ...patch,
+    });
+
+  it("accepts a payload that is production's own, legacy's master key included", () => {
+    expect(productionIdentityProblems(prodEnv(), { legacyMasterKey: true }, fps)).toEqual([]);
+  });
+
+  it('refuses a staging database, Firebase project, bucket or URL', () => {
+    const env = prodEnv({
+      DATABASE_URI: 'mongodb+srv://u:p@switch-staging.abcde.mongodb.net/switch_staging',
+      FIREBASE_SERVICE_ACCOUNT: firebase('switchfood-staging'),
+      S3_BUCKET: 'switchfood-staging',
+      PARSE_PUBLIC_SERVER_URL: 'https://switchfood-staging.oa.r.appspot.com',
+    });
+    expect(productionIdentityProblems(env, { legacyMasterKey: true }, fps)).toEqual([
+      'DATABASE_URI is not the production cluster',
+      'PARSE_PUBLIC_SERVER_URL is not https://api.switchfood.net',
+      expect.stringContaining('FIREBASE_SERVICE_ACCOUNT belongs to switchfood-staging'),
+      'S3_BUCKET is switchfood-staging, not switchfood',
+    ]);
+  });
+
+  it("needs legacy's master key until legacy is deleted, then accepts a new one", () => {
+    const env = prodEnv({ PARSE_MASTER_KEY: 'a-brand-new-key' });
+    expect(productionIdentityProblems(env, { legacyMasterKey: true }, fps)).toEqual([
+      expect.stringContaining("PARSE_MASTER_KEY is not legacy's master key"),
+    ]);
+    expect(productionIdentityProblems(env, { legacyMasterKey: false }, fps)).toEqual([]);
+  });
+
+  it('is only for production', () => {
+    expect(productionIdentityProblems(testEnv(), { legacyMasterKey: false }, fps)).toContain(
+      'APP_ENV is test, not production',
     );
   });
 });

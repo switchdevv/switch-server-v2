@@ -13,7 +13,10 @@ Read in order:
 4. [04-local-dev.md](04-local-dev.md): run the server, every app and every dashboard locally
    with seeded data (`pnpm dev:all`). Start here to work on anything.
 5. [05-staging.md](05-staging.md): CI, the staging environment and its automatic deploys from
-   `main`: one-time setup step by step, secrets, seeding, rollback, troubleshooting.
+   `stg`: one-time setup step by step, secrets, seeding, rollback, troubleshooting.
+6. [06-production.md](06-production.md): production. One-time setup, the manual deploy and
+   promote workflows, the switch from legacy (runbook), rollback, releases, decommissioning
+   legacy.
 
 Two rules that override everything in these docs:
 

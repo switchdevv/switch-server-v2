@@ -13,8 +13,9 @@ empty laptop to running everything locally and shipping a change to staging.
 
 - All 50 cloud functions, 11 triggers and the automatic dispatch job are ported.
 - Staging is live and deploys automatically from the `stg` branch.
-- Production still runs the old `switch-server`. `main` is kept for the future production
-  pipeline; nothing deploys from it yet.
+- Production still runs the old `switch-server`. The production pipeline is ready: v2 goes to
+  production as a version next to the old server's, by manual runs from `main`, and takes the
+  traffic in one switch ([docs/06-production.md](docs/06-production.md)).
 - The automated comparison against the old server (plan P1-7) is not built yet. For now, tests
   written by hand check that v2 behaves like the old server.
 
@@ -49,22 +50,24 @@ pnpm seed        # once: fills the empty local database with test data
 
 ## Scripts
 
-| Script                                | What it does                                                           |
-| ------------------------------------- | ---------------------------------------------------------------------- |
-| `pnpm dev`                            | Server with hot reload (`APP_ENV=local`, reads `.env.local`)           |
-| `pnpm dev:all`                        | Docker + server + seed + every client (`--only`, `--skip web\|mobile`) |
-| `pnpm stack:up` / `stack:down`        | Start / stop the local Docker services                                 |
-| `pnpm seed` / `db:reset`              | Seed an empty local database / empty it and seed again                 |
-| `pnpm test`                           | Unit + integration tests (in-memory MongoDB, fake outside services)    |
-| `pnpm test:unit` / `test:integration` | One test suite                                                         |
-| `pnpm check`                          | Typecheck + lint + tests                                               |
-| `pnpm typecheck` / `lint` / `format`  | Quality checks (CI runs `format:check`)                                |
-| `pnpm build` / `start`                | Compile to `dist/` / run the compiled server                           |
-| `pnpm setup:env`                      | Create `.env.local` from `.env.example` (never overwrites it)          |
-| `pnpm fingerprint`                    | Hash values from stdin for the production-leak guard                   |
-| `pnpm staging:secret`                 | Add a new version of the staging secrets and pin it in `.env.staging`  |
-| `pnpm staging:preflight --project X`  | Check `.env.staging` against the staging project, like the deploy does |
-| `pnpm seed:staging`                   | Seed an empty staging database (`SEED_PASSWORD`, 12+ characters)       |
+| Script                                  | What it does                                                           |
+| --------------------------------------- | ---------------------------------------------------------------------- |
+| `pnpm dev`                              | Server with hot reload (`APP_ENV=local`, reads `.env.local`)           |
+| `pnpm dev:all`                          | Docker + server + seed + every client (`--only`, `--skip web\|mobile`) |
+| `pnpm stack:up` / `stack:down`          | Start / stop the local Docker services                                 |
+| `pnpm seed` / `db:reset`                | Seed an empty local database / empty it and seed again                 |
+| `pnpm test`                             | Unit + integration tests (in-memory MongoDB, fake outside services)    |
+| `pnpm test:unit` / `test:integration`   | One test suite                                                         |
+| `pnpm check`                            | Typecheck + lint + tests                                               |
+| `pnpm typecheck` / `lint` / `format`    | Quality checks (CI runs `format:check`)                                |
+| `pnpm build` / `start`                  | Compile to `dist/` / run the compiled server                           |
+| `pnpm setup:env`                        | Create `.env.local` from `.env.example` (never overwrites it)          |
+| `pnpm fingerprint`                      | Hash values from stdin for the production-leak guard                   |
+| `pnpm staging:secret`                   | Add a new version of the staging secrets and pin it in `.env.staging`  |
+| `pnpm staging:preflight --project X`    | Check `.env.staging` against the staging project, like the deploy does |
+| `pnpm seed:staging`                     | Seed an empty staging database (`SEED_PASSWORD`, 12+ characters)       |
+| `pnpm production:secret`                | Add a new version of the production secrets and pin it in `.env.prod`  |
+| `pnpm production:preflight --project X` | Check `.env.prod` against the production project, like the deploy does |
 
 ## CI and deploys
 
@@ -73,8 +76,10 @@ pnpm seed        # once: fills the empty local database with test data
 - **Every push to `stg`** runs the same checks, then deploys to staging
   (`.github/workflows/deploy-staging.yml`). The new version gets traffic only after its `/health`
   and `/config` answer. The five previous versions are kept for rollback.
-- **Production** has no workflow yet. It will be a manual, step-by-step switch described in the
-  [cutover runbook](docs/01-rewrite-plan.md#10-cutover-and-rollback-runbook-production).
+- **Production** deploys only by hand, from `main`: **deploy-production** adds a version with no
+  traffic after the same checks, and **promote-production** moves the traffic (100%, or a 10%/50%
+  canary), which is also how to roll back. Setup, the switch from the old server, rollback:
+  [docs/06-production.md](docs/06-production.md).
 
 The server runs on Google App Engine (`nodejs24`). CI builds it, and `.gcloudignore` uploads only
 `dist/`, the package manifests and the non-secret env files.
@@ -115,8 +120,8 @@ src/
   ports/ adapters/   every outside service behind an interface, with real and fake versions
   i18n/              translations.json, identical to the old server's
 test/                unit and integration tests (real Parse Server + in-memory MongoDB)
-tools/               dev:all, seed scripts, env setup, staging secret and deploy checks
-docs/                onboarding, plan, contract, environments, local dev, staging, decisions
+tools/               dev:all, seed scripts, env setup, staging/production secrets and deploy checks
+docs/                onboarding, plan, contract, environments, local dev, staging, production, decisions
 ```
 
 ## Docs
@@ -129,4 +134,6 @@ docs/                onboarding, plan, contract, environments, local dev, stagin
 3. [Environments](docs/03-environments-and-dev-setup.md): `.env` files, every variable, secrets.
 4. [Local development](docs/04-local-dev.md): the whole platform on your Mac, seeded accounts.
 5. [Staging](docs/05-staging.md): how staging was set up, deploys, rollback, troubleshooting.
-6. [Decisions (ADRs)](docs/adr/): design decisions and why they were made.
+6. [Production](docs/06-production.md): setup, the switch from the old server, releases,
+   rollback, decommissioning the old server.
+7. [Decisions (ADRs)](docs/adr/): design decisions and why they were made.

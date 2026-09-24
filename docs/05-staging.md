@@ -368,8 +368,9 @@ to testers' phones.
 
 ## Not covered here
 
-- **Production.** No workflow deploys it. The cutover runbook is plan §10: manual, `--no-promote`,
-  traffic split, after staging sign-off.
+- **Production.** Nothing here deploys it. It has its own guide and workflows,
+  [06-production.md](06-production.md): manual runs from `main`, a version with no traffic, then
+  a traffic move you decide.
 - **Client builds for staging.** Each client has its own: ops and finance deploy from their `stg`
   branch (`docs/staging.md` in each repo). The Android apps build a signed `stg` APK
   (`<app>.stg` package, the staging Firebase and Pusher apps) with `npm run android:stg`

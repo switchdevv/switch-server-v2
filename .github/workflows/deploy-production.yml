@@ -1,0 +1,136 @@
+# Production deploy. Manual only: Actions → deploy-production → Run workflow, on main. The ci
+# checks run, then the dist/ they built goes to switch-proj's App Engine as a new version of the
+# `default` service WITHOUT traffic, and is checked to answer /health on its own URL. It never
+# moves traffic: promote-production.yml does, when you decide. Google only issues credentials to a
+# manual run from main of this repository. Setup, the switch, rollback: docs/06-production.md.
+name: deploy-production
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash # explicit: adds pipefail
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+    with:
+      upload-build: true
+
+  deploy:
+    needs: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write # Workload Identity Federation: GitHub holds no Google key
+    env:
+      # Repository variables (Settings → Secrets and variables → Actions → Variables).
+      PROJECT_ID: ${{ vars.PROD_GCP_PROJECT_ID }}
+      WIF_PROVIDER: ${{ vars.PROD_GCP_WIF_PROVIDER }}
+      DEPLOY_SA: ${{ vars.PROD_GCP_DEPLOY_SA }}
+    steps:
+      - name: Check the branch and the repository variables
+        run: |
+          if [ "$GITHUB_REF" != refs/heads/main ]; then
+            echo "::error::Production deploys only from main (this run is on $GITHUB_REF). Google refuses any other branch."
+            exit 1
+          fi
+          missing=""
+          [ -n "$PROJECT_ID" ] || missing="$missing PROD_GCP_PROJECT_ID"
+          [ -n "$WIF_PROVIDER" ] || missing="$missing PROD_GCP_WIF_PROVIDER"
+          [ -n "$DEPLOY_SA" ] || missing="$missing PROD_GCP_DEPLOY_SA"
+          if [ -n "$missing" ]; then
+            echo "::error::Set these repository variables:$missing (docs/06-production.md, step 8)."
+            exit 1
+          fi
+          # App Engine version ids: lowercase letters, digits and hyphens. `v2-` tells them apart
+          # from legacy's version in the same service.
+          echo "VERSION=v2-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v7
+      - name: Get the build ci tested
+        uses: actions/download-artifact@v8
+        with:
+          name: server-build
+          path: dist
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ vars.PROD_GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.PROD_GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.PROD_GCP_DEPLOY_SA }}
+      - uses: google-github-actions/setup-gcloud@v3
+      - name: Preflight (.env.prod matches the project serving api.switchfood.net)
+        id: preflight
+        run: node tools/deploy/production-preflight.ts --project "$PROJECT_ID"
+      - name: What serves production now
+        id: before
+        run: |
+          serving=$(gcloud app services describe default --project="$PROJECT_ID" \
+            --format='value(split.allocations)')
+          echo "serving=$serving" >> "$GITHUB_OUTPUT"
+          echo "Serving before this deploy: $serving"
+      - name: Deploy ${{ env.VERSION }} without traffic
+        run: >
+          gcloud app deploy app.yaml --project="$PROJECT_ID" --version="$VERSION"
+          --no-promote --quiet
+      - name: Check ${{ env.VERSION }} answers /health
+        id: smoke
+        run: |
+          url=$(gcloud app versions describe "$VERSION" --service=default --project="$PROJECT_ID" \
+            --format='value(versionUrl)')
+          echo "version_url=$url" >> "$GITHUB_OUTPUT"
+          logs="gcloud app logs read --project=$PROJECT_ID --service=default --version=$VERSION --limit=100"
+          # Only /health on the version's own URL: no API call, no key, nothing written. A cold
+          # start (Secret Manager, MongoDB, Parse) takes a while; give it three minutes.
+          ok=""
+          for _ in $(seq 36); do
+            code=$(curl -s -o "$RUNNER_TEMP/health.json" -w '%{http_code}' --max-time 20 \
+              "$url/health" || true)
+            if [ "$code" = 200 ] && grep -q '"status":"ok"' "$RUNNER_TEMP/health.json"; then
+              ok=1
+              break
+            fi
+            echo "not ready yet (HTTP ${code:-none})"
+            sleep 5
+          done
+          if [ -z "$ok" ]; then
+            echo "::error::$VERSION never answered /health. It has no traffic; production is unchanged. Boot log: $logs. Delete it: gcloud app versions delete $VERSION --service=default --project=$PROJECT_ID"
+            exit 1
+          fi
+          echo "$VERSION is healthy at $url, with no traffic"
+      - name: Summary
+        if: always()
+        env:
+          STATUS: ${{ job.status }}
+          VERSION_URL: ${{ steps.smoke.outputs.version_url }}
+          SERVING: ${{ steps.before.outputs.serving }}
+          WORKER: ${{ steps.preflight.outputs.dispatch_worker }}
+          SECRET_VERSION: ${{ steps.preflight.outputs.secret_version }}
+        run: |
+          {
+            echo "### Production deploy: $STATUS (no traffic moved)"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Version | \`${VERSION:-none}\` |"
+            echo "| Commit | \`$GITHUB_SHA\` |"
+            echo "| This version | ${VERSION_URL:-n/a} |"
+            echo "| Dispatch worker | ${WORKER:-n/a} |"
+            echo "| Secret version | ${SECRET_VERSION:-n/a} |"
+            echo "| Serving production | \`${SERVING:-n/a}\` |"
+            echo
+            if [ "$STATUS" = success ]; then
+              echo "Next: Actions → **promote-production** → Run workflow on \`main\`, version \`$VERSION\`, percent 100 (or 10 first)."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

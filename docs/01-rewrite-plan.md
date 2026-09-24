@@ -103,7 +103,8 @@ upgrade through Renovate.
 
 Same GCP project `switch-proj`, same App Engine service, same custom domain. v2 deploys as a
 **new version** of the service (`runtime: nodejs24`), so the cutover is a traffic move and rollback
-is a traffic move back (§10). Instance class **F2 (768 MB)** is the starting point. Parse Server 9
+is a traffic move back (§10, operated by [06-production.md](06-production.md)). DNS (GoDaddy) and
+the domain mapping don't change. Instance class **F2 (768 MB)** is the starting point. Parse Server 9
 on Node 24 has a larger baseline footprint than 4.3 on Node 14. Staging load tests (P4-5) confirm
 or adjust this before prod (OD-8).
 
@@ -634,6 +635,15 @@ client-visible effect is nil or intended.
 ---
 
 ## 10. Cutover and rollback runbook (production)
+
+> **Operated by [06-production.md](06-production.md)**, which turns this runbook into steps and
+> commands: the `deploy-production` / `promote-production` workflows (manual runs from `main`),
+> the go/no-go list, verification, the T+24 h dispatch-worker step, deleting legacy's version and
+> decommissioning. Decided since this was written: the canary is **optional**, and the default is
+> one switch to 100% with legacy kept at 0% for rollback. Legacy's version can't be stopped
+> (automatic scaling), only deleted, so it is deleted after about 7 clean days (30 at most).
+> Meanwhile its dispatch worker keeps taking a share of jobs, and its cloud code calls
+> `api.switchfood.net` (then v2) with the master key.
 
 **Pre-conditions:** Phases 0–5 exit criteria met; you have approved the index plan and the canary
 windows; on-call (you + engineer) available; dashboards and alerts live (§11).

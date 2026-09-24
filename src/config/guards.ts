@@ -157,6 +157,48 @@ export function prodLeakProblems(
   return problems;
 }
 
+/** The production Parse host: the domain App Engine maps to switch-proj's default service. */
+export const PROD_API_HOST = `api.${PROD_PUBLIC.hostSuffix}`;
+
+/**
+ * The inverse of the prod-leak guard, for `pnpm production:secret`: why a production secret
+ * version would NOT be production's own, so it is refused before it is added. The database must be
+ * the production cluster, the Firebase project and the bucket production's. While the legacy
+ * version is still deployed, the master key must also be legacy's: legacy's cloud code calls
+ * api.switchfood.net with it, and after the switch that is v2 (docs/06-production.md).
+ */
+export function productionIdentityProblems(
+  env: Env,
+  options: { legacyMasterKey: boolean } = { legacyMasterKey: true },
+  fingerprints: Record<keyof typeof PROD_FINGERPRINTS, string> = PROD_FINGERPRINTS,
+): string[] {
+  const problems: string[] = [];
+  if (env.APP_ENV !== 'production') problems.push(`APP_ENV is ${env.APP_ENV}, not production`);
+  if (!dbHosts(env.DATABASE_URI).some((h) => fingerprint(h) === fingerprints.dbHost)) {
+    problems.push('DATABASE_URI is not the production cluster');
+  }
+  if (options.legacyMasterKey && fingerprint(env.PARSE_MASTER_KEY) !== fingerprints.masterKey) {
+    problems.push(
+      "PARSE_MASTER_KEY is not legacy's master key, which v2 needs until the legacy version is deleted",
+    );
+  }
+  if (new URL(env.PARSE_PUBLIC_SERVER_URL).hostname !== PROD_API_HOST) {
+    problems.push(`PARSE_PUBLIC_SERVER_URL is not https://${PROD_API_HOST}`);
+  }
+  if (env.PUSH_DRIVER !== 'fake') {
+    const { projectId } = firebaseIdentity(env.FIREBASE_SERVICE_ACCOUNT);
+    if (projectId !== PROD_PUBLIC.firebaseProjectId) {
+      problems.push(
+        `FIREBASE_SERVICE_ACCOUNT belongs to ${projectId ?? 'no project'}, not ${PROD_PUBLIC.firebaseProjectId} (the apps' Firebase project)`,
+      );
+    }
+  }
+  if (env.FILES_DRIVER === 's3' && env.S3_BUCKET !== PROD_PUBLIC.bucket) {
+    problems.push(`S3_BUCKET is ${env.S3_BUCKET ?? 'not set'}, not ${PROD_PUBLIC.bucket}`);
+  }
+  return problems;
+}
+
 export function assertNoProdLeak(env: Env): void {
   const problems = prodLeakProblems(env);
   if (problems.length > 0) {

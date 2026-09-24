@@ -1,34 +1,98 @@
-// `pnpm staging:secret`: adds a version of the staging secret (SECRETS_NAME in SECRETS_PROJECT,
-// both from .env.staging) and pins it in .env.staging's SECRETS_VERSION. Asks only for the values
-// the configured drivers need, with hidden input; Enter keeps the value of the version .env.staging
-// pins (or of the latest one). The master and maintenance keys are generated (`--new-keys`
-// replaces them). Nothing is sent before the result passes the server's own boot checks: the env
-// schema and the prod-leak guard.
+// `pnpm staging:secret` / `pnpm production:secret`: adds a version of that environment's secret
+// (SECRETS_NAME in SECRETS_PROJECT, both from its env file) and pins it in the file's
+// SECRETS_VERSION. Asks only for the values the configured drivers need, with hidden input; Enter
+// keeps the value of the version the file pins (or of the latest one). Nothing is sent before the
+// result passes the server's own boot checks (the env schema), plus:
+//
+// - staging: the prod-leak guard. The master and maintenance keys are generated (`--new-keys`
+//   replaces them).
+// - production: the inverse check, that every identity in it is production's own (database
+//   cluster, Firebase project, bucket, URL). The maintenance key is generated; the master key is
+//   asked for and must be legacy's while the legacy version is deployed. `--new-master-key`
+//   generates a new one instead: only once legacy is deleted (docs/06-production.md).
 //
 // Needs `gcloud auth login` with access to the secret. Values only travel on gcloud's stdin: never
 // on a command line, in a file or on screen.
+//
+//   tsx tools/secret.ts staging|production [--new-keys] [--new-master-key]
 import { execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { stdin, stdout } from 'node:process';
 import { createInterface } from 'node:readline/promises';
 import { parseEnv as parseDotenv } from 'node:util';
-import { type Env, parseEnv, SECRET_KEYS } from '../src/config/env.js';
-import { prodLeakProblems } from '../src/config/guards.js';
+import { type AppEnv, type Env, parseEnv, SECRET_KEYS } from '../src/config/env.js';
+import { productionIdentityProblems, prodLeakProblems } from '../src/config/guards.js';
 
 type SecretKey = (typeof SECRET_KEYS)[number];
 type Payload = Partial<Record<SecretKey, string>>;
 
-const ENV_FILE = '.env.staging';
-const GENERATED: SecretKey[] = ['PARSE_MASTER_KEY', 'PARSE_MAINTENANCE_KEY'];
+interface Target {
+  appEnv: Extract<AppEnv, 'staging' | 'production'>;
+  envFile: string;
+  guide: string;
+  /** Keys this tool makes up rather than asks for. */
+  generated: SecretKey[];
+  /** What to enter for each asked key. */
+  help: Partial<Record<SecretKey, string>>;
+  /** The database name the URI example shows. */
+  database: string;
+  /** Environment-specific refusals, on top of the env schema. */
+  problems: (env: Env) => string[];
+  /** Printed once the version is added and pinned. */
+  next: string;
+}
+
+const newKeys = process.argv.includes('--new-keys');
+const newMasterKey = process.argv.includes('--new-master-key');
+
+const TARGETS: Record<Target['appEnv'], Target> = {
+  staging: {
+    appEnv: 'staging',
+    envFile: '.env.staging',
+    guide: 'docs/05-staging.md, "Secret Manager"',
+    generated: ['PARSE_MASTER_KEY', 'PARSE_MAINTENANCE_KEY'],
+    database: 'switch_staging',
+    help: {
+      DATABASE_URI:
+        'staging Atlas URI with the database name: mongodb+srv://USER:PASS@HOST/switch_staging',
+      FIREBASE_SERVICE_ACCOUNT: 'path to the staging Firebase service-account JSON file',
+      PUSHER_SECRET: 'staging Pusher app secret',
+    },
+    problems: (env) => prodLeakProblems(env),
+    next:
+      '  Commit .env.staging and push to stg: the next deploy loads it. Older versions stay\n' +
+      '  enabled for rollbacks; disable them once the new one is live.',
+  },
+  production: {
+    appEnv: 'production',
+    envFile: '.env.prod',
+    guide: 'docs/06-production.md, step 5',
+    generated: newMasterKey
+      ? ['PARSE_MASTER_KEY', 'PARSE_MAINTENANCE_KEY']
+      : ['PARSE_MAINTENANCE_KEY'],
+    database: '<database>',
+    help: {
+      PARSE_MASTER_KEY: "legacy's master key (switch-server configs.js → parse.masterKey)",
+      DATABASE_URI:
+        'production Atlas URI with the database name: mongodb+srv://USER:PASS@HOST/<database>',
+      FIREBASE_SERVICE_ACCOUNT: 'path to the switch-proj Firebase service-account JSON file',
+      PUSHER_SECRET: 'production Pusher app secret (the app whose key is in .env.prod)',
+    },
+    problems: (env) => productionIdentityProblems(env, { legacyMasterKey: !newMasterKey }),
+    next:
+      '  Commit .env.prod and merge it into main, then run deploy-production and promote the new\n' +
+      '  version. Older versions stay enabled for rollbacks; disable them once the new one is live.',
+  },
+};
+
 const HELP: Record<SecretKey, string> = {
   PARSE_MASTER_KEY: 'generated',
   PARSE_MAINTENANCE_KEY: 'generated',
-  DATABASE_URI:
-    'staging Atlas URI with the database name: mongodb+srv://USER:PASS@HOST/switch_staging',
+  DATABASE_URI: 'Atlas URI with the database name',
   SENDGRID_API_KEY: 'SendGrid API key',
-  FIREBASE_SERVICE_ACCOUNT: 'path to the staging Firebase service-account JSON file',
-  PUSHER_SECRET: 'staging Pusher app secret',
+  FIREBASE_SERVICE_ACCOUNT: 'path to the Firebase service-account JSON file',
+  PUSHER_SECRET: 'Pusher app secret',
   SMS_API_KEY: 'SMS Algérie apikey',
   SMS_USER_KEY: 'SMS Algérie userkey',
   GOOGLE_MAPS_API_KEY: 'Google Maps (Distance Matrix) key',
@@ -100,7 +164,7 @@ function mongoTarget(uri: string): { host: string; database: string } {
   return { host: m?.[1] ?? '?', database: m?.[2] ?? '' };
 }
 
-/** The secret values each driver in .env.staging needs (what the server reads at boot). */
+/** The secret values each driver in the env file needs (what the server reads at boot). */
 function neededKeys(file: Record<string, string | undefined>): SecretKey[] {
   const needs: [boolean, SecretKey[]][] = [
     [true, ['PARSE_MASTER_KEY', 'PARSE_MAINTENANCE_KEY', 'DATABASE_URI']],
@@ -148,18 +212,24 @@ function describe(key: SecretKey, value: string): string {
   return '';
 }
 
+const targetName = process.argv[2] ?? '';
+if (!(targetName in TARGETS)) fail('Usage: tsx tools/secret.ts staging|production [--new-keys]');
+const target = TARGETS[targetName as Target['appEnv']];
+const ENV_FILE = target.envFile;
+if (newMasterKey && target.appEnv !== 'production') fail('--new-master-key is for production.');
+
 if (!stdin.isTTY) fail('Run this in a terminal: it asks for secret values.');
 const file = parseDotenv(readFileSync(ENV_FILE, 'utf8'));
 const project = file.SECRETS_PROJECT;
 const name = file.SECRETS_NAME || 'switch-server-env';
-if (!project) fail(`Set SECRETS_PROJECT in ${ENV_FILE} to the staging project id first.`);
+if (!project) fail(`Set SECRETS_PROJECT in ${ENV_FILE} to the ${target.appEnv} project id first.`);
 
 try {
   gcloud(['secrets', 'describe', name, `--project=${project}`, '--format=value(name)']);
 } catch (error) {
   fail(
     `Can't read secret ${name} in ${project} (${(error as Error).message.split('\n')[0]}).\n` +
-      '  Create it and grant access first (docs/05-staging.md, "Secret Manager").',
+      `  Create it and grant access first (${target.guide}).`,
   );
 }
 const pinnedVersion = file.SECRETS_VERSION ?? '';
@@ -181,13 +251,14 @@ try {
   console.log(`${name} has no readable version yet: every value is new.\n`);
 }
 
-const newKeys = process.argv.includes('--new-keys');
 const payload: Payload = {};
 const status: Partial<Record<SecretKey, string>> = {};
 for (const key of neededKeys(file)) {
   const had = current[key];
-  if (GENERATED.includes(key)) {
-    if (had && !newKeys) {
+  if (target.generated.includes(key)) {
+    // A new master key only when asked: it signs every session and the Parse Dashboard.
+    const replace = key === 'PARSE_MASTER_KEY' ? newKeys || newMasterKey : newKeys;
+    if (had && !replace) {
       payload[key] = had;
       status[key] = 'kept';
     } else {
@@ -197,11 +268,12 @@ for (const key of neededKeys(file)) {
     continue;
   }
   const hint = had ? ' [Enter keeps the current one]' : '';
+  const help = target.help[key] ?? HELP[key];
   if (key === 'FIREBASE_SERVICE_ACCOUNT') {
-    const path = await ask(`${key}: ${HELP[key]}${hint}\n  > `);
+    const path = await ask(`${key}: ${help}${hint}\n  > `);
     if (path) payload[key] = readServiceAccount(path);
   } else {
-    const value = await ask(`${key}: ${HELP[key]}${hint}\n  > `, true);
+    const value = await ask(`${key}: ${help}${hint}\n  > `, true);
     if (value) payload[key] = value;
   }
   if (payload[key]) status[key] = had === payload[key] ? 'unchanged' : 'new';
@@ -214,7 +286,7 @@ for (const key of neededKeys(file)) {
 // The server's own boot checks, on exactly what it will load.
 let env: Env;
 try {
-  env = parseEnv({ ...file, APP_ENV: 'staging', ...payload });
+  env = parseEnv({ ...file, APP_ENV: target.appEnv, ...payload });
 } catch (error) {
   fail((error as Error).message);
 }
@@ -224,8 +296,8 @@ const problems = [
     .map((key) => `${key} is missing (needed by the drivers in ${ENV_FILE})`),
   ...(mongoTarget(env.DATABASE_URI).database
     ? []
-    : ['DATABASE_URI has no database name (…/switch_staging?…): Parse would use "test"']),
-  ...prodLeakProblems(env),
+    : [`DATABASE_URI has no database name (…/${target.database}?…): Parse would use "test"`]),
+  ...target.problems(env),
 ];
 if (problems.length > 0) fail(`Not added:\n  ${problems.join('\n  ')}`);
 
@@ -259,7 +331,5 @@ writeFileSync(
     : `${text.trimEnd()}\nSECRETS_VERSION=${version}\n`,
 );
 console.log(
-  `\n✓ Added version ${version} and set SECRETS_VERSION=${version} in ${ENV_FILE}.\n` +
-    '  Commit .env.staging and push to main: the next deploy loads it. Older versions stay\n' +
-    '  enabled for rollbacks; disable them once the new one is live.',
+  `\n✓ Added version ${version} and set SECRETS_VERSION=${version} in ${ENV_FILE}.\n` + target.next,
 );
