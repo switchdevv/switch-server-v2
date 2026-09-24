@@ -61,6 +61,9 @@ importers:
       mongodb-memory-server:
         specifier: 11.2.0
         version: 11.2.0
+      parse-sdk-2:
+        specifier: npm:parse@2.17.0
+        version: parse@2.17.0
       prettier:
         specifier: 3.9.8
         version: 3.9.8
@@ -326,6 +329,9 @@ packages:
     resolution: {integrity: sha512-sl4Bm6yiMNYrZKkqqDFWN0UfnWhlS8ivKxrYl+6t0gCLrqr8y3B2IqZZbFRkfaVVp7C/baApyh71P+LeE1A2sQ==}
     engines: {node: '>=18.0.0'}
 
+  '@babel/runtime-corejs3@7.11.2':
+    resolution: {integrity: sha512-qh5IR+8VgFz83VBa6OkaET6uN/mJOhHONuy3m1sgF0CV6mXdPSEBdA7e1eUbVvyNtANjMbg22JUv71BaDXLY6A==}
+
   '@babel/runtime-corejs3@7.29.0':
     resolution: {integrity: sha512-TgUkdp71C9pIbBcHudc+gXZnihEDOjUAmXO1VO4HHGES7QLZcShR0stfKIxLSNIYx2fqhmJChOjm/wkF8wv4gA==}
     engines: {node: '>=6.9.0'}
@@ -333,6 +339,9 @@ packages:
   '@babel/runtime-corejs3@7.29.2':
     resolution: {integrity: sha512-Lc94FOD5+0aXhdb0Tdg3RUtqT6yWbI/BbFWvlaSJ3gAb9Ks+99nHRDKADVqC37er4eCB0fHyWT+y+K3QOvJKbw==}
     engines: {node: '>=6.9.0'}
+
+  '@babel/runtime@7.11.2':
+    resolution: {integrity: sha512-TeWkU52so0mPtDcaCTxNBI/IHiz0pZgr8VEFqXFtZWpYD08ZB6FaSwVAS8MKRQAP3bYKiVjwysOJgMFY28o6Tw==}
 
   '@babel/runtime@7.28.6':
     resolution: {integrity: sha512-05WQkdpL9COIMz4LjTxGpPNCdlpyimKppYNoJ5Di5EUObifl8t4tuLuUBBZEpoLYOmfvIWrsp9fCl0HoPRVTdA==}
@@ -1734,6 +1743,10 @@ packages:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
     engines: {node: '>= 8'}
 
+  crypto-js@4.0.0:
+    resolution: {integrity: sha512-bzHZN8Pn+gS7DQA6n+iUmBfl0hO5DJq++QP3U6uTucDtk/0iGpXd/Gg7CGR0p8tJhofJyaKoWBuJI4eAO00BBg==}
+    deprecated: Active development of CryptoJS has been discontinued. This library is no longer maintained.
+
   crypto-js@4.2.0:
     resolution: {integrity: sha512-KALDyEYgpY+Rlob/iriUtjV6d5Eq+Y191A5g4UqLAi8CyGP9N1+FdVbkc1SxKc2r4YAYqG8JzO2KGL+AizD70Q==}
     deprecated: Active development of CryptoJS has been discontinued. This library is no longer maintained.
@@ -2795,6 +2808,9 @@ packages:
     engines: {node: '>=20.19.0 <21.0.0 || >=22.13.0 <23.0.0 || >=24.11.0 <25.0.0'}
     hasBin: true
 
+  parse@2.17.0:
+    resolution: {integrity: sha512-1hWoMNW39LH5YV3xCds9LyD8SsKD6FUwlD1Kn8ZlXNosg6WgF+s3ZSQUzT5AJ/9YPUoC/y1PoCO79FumrBYftA==}
+
   parse@8.5.0:
     resolution: {integrity: sha512-X9gI4Yjbi9LPMPnCtKL4h0Nxe1aSCFMPWcB1zbu11qU/Be3eVSB5I5IMBunTuWlVz6Wchu3dtM5jl/1aBZ9wiQ==}
     engines: {node: '>=20.19.0 <21 || >=22.12.0 <23 || >=24.1.0 <25'}
@@ -3036,6 +3052,9 @@ packages:
   redis@5.11.0:
     resolution: {integrity: sha512-YwXjATVDT+AuxcyfOwZn046aml9jMlQPvU1VXIlLDVAExe0u93aTfPYSeRgG4p9Q/Jlkj+LXJ1XEoFV+j2JKcQ==}
     engines: {node: '>= 18'}
+
+  regenerator-runtime@0.13.11:
+    resolution: {integrity: sha512-kY1AZVr2Ra+t+piVaJ4gxaFaReZVH40AKNo7UCX6W+dEwBo/2oZJzqfuN1qLq1oL45o56cPaTXELwrTh8Fpggg==}
 
   require-directory@2.1.1:
     resolution: {integrity: sha512-fGxEI7+wsG9xrvdjsrlmL22OMTTiHRwAMroiEeMgq8gzoLC/PQr7RsRDSTLUg/bZAZtF+TVIkHc6/4RIKrui+Q==}
@@ -3352,6 +3371,11 @@ packages:
     resolution: {integrity: sha512-vIYxrBCC/N/K+Js3qSN88go7kIfNPssr/hHCesKCQNAjmgvYS2oqr69kIufEG+O4+PfezOH4EbIeHCfFov8ZgQ==}
     hasBin: true
 
+  uuid@3.4.0:
+    resolution: {integrity: sha512-HjSDRw6gZE5JMggctHBcjVak08+KEVhSIiDzFnT9S9aegmp85S/bReBVTb4QTFaRNptJ9kuYaNhnbNEOkbKb/A==}
+    deprecated: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
+    hasBin: true
+
   uuid@9.0.1:
     resolution: {integrity: sha512-b+1eJOlsR9K8HJpow9Ok3fiWOWSIcIzXodvv0rQjVoOVNpWMpxf1wZNpt4y9h10odCNrqnYp1OBzRktckBe3sA==}
     deprecated: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
@@ -3553,6 +3577,10 @@ packages:
   xml-naming@0.3.0:
     resolution: {integrity: sha512-ghig2TBE/H11aOVgmahA3MhimvkBr6JIYknH/Dhdk10nXwdbIqBJsbfMxpvFPG8bAw77gN29aQWvKpmVoPlvPQ==}
     engines: {node: '>=16.0.0'}
+
+  xmlhttprequest@1.8.0:
+    resolution: {integrity: sha512-58Im/U0mlVBLM38NdZjHyhuMtCqa61469k2YP/AaPbvCoV9aQGUpbJBj1QRm2ytRiVQBD/fsw7L2bJGDVQswBA==}
+    engines: {node: '>=0.4.0'}
 
   xtend@4.0.2:
     resolution: {integrity: sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ==}
@@ -4039,6 +4067,11 @@ snapshots:
 
   '@aws/lambda-invoke-store@0.3.0': {}
 
+  '@babel/runtime-corejs3@7.11.2':
+    dependencies:
+      core-js-pure: 3.50.0
+      regenerator-runtime: 0.13.11
+
   '@babel/runtime-corejs3@7.29.0':
     dependencies:
       core-js-pure: 3.50.0
@@ -4046,6 +4079,10 @@ snapshots:
   '@babel/runtime-corejs3@7.29.2':
     dependencies:
       core-js-pure: 3.50.0
+
+  '@babel/runtime@7.11.2':
+    dependencies:
+      regenerator-runtime: 0.13.11
 
   '@babel/runtime@7.28.6': {}
 
@@ -5437,6 +5474,9 @@ snapshots:
       shebang-command: 2.0.0
       which: 2.0.2
 
+  crypto-js@4.0.0:
+    optional: true
+
   crypto-js@4.2.0: {}
 
   data-uri-to-buffer@4.0.1: {}
@@ -6717,6 +6757,20 @@ snapshots:
       - supports-color
       - utf-8-validate
 
+  parse@2.17.0:
+    dependencies:
+      '@babel/runtime': 7.11.2
+      '@babel/runtime-corejs3': 7.11.2
+      react-native-crypto-js: 1.0.0
+      uuid: 3.4.0
+      ws: 8.21.3
+      xmlhttprequest: 1.8.0
+    optionalDependencies:
+      crypto-js: 4.0.0
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
   parse@8.5.0:
     dependencies:
       '@babel/runtime': 7.28.6
@@ -6978,6 +7032,8 @@ snapshots:
       '@redis/time-series': 5.11.0(@redis/client@5.11.0)
     transitivePeerDependencies:
       - '@node-rs/xxhash'
+
+  regenerator-runtime@0.13.11: {}
 
   require-directory@2.1.1: {}
 
@@ -7364,6 +7420,8 @@ snapshots:
 
   uuid@11.1.1: {}
 
+  uuid@3.4.0: {}
+
   uuid@9.0.1:
     optional: true
 
@@ -7528,6 +7586,8 @@ snapshots:
 
   xml-naming@0.3.0:
     optional: true
+
+  xmlhttprequest@1.8.0: {}
 
   xtend@4.0.2: {}
 
