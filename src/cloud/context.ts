@@ -2,6 +2,15 @@ import type ParseDefault from 'parse/node';
 import type { Env } from '../config/env.js';
 import type { Logger } from '../observability/logger.js';
 import type { Ports } from '../ports/index.js';
+import type { WalletLevel } from '../domain/driver-wallet.js';
+import type {
+  DriverWalletDoc,
+  NewWalletEntry,
+  OrderUnitRow,
+  WalletActor,
+  WalletEntryDoc,
+  WalletWindow,
+} from './driver-wallets.js';
 
 /** The Parse namespace Parse Server hands to `cloud(Parse)`, with `Parse.Cloud` server methods. */
 export type ParseSdk = typeof ParseDefault;
@@ -62,6 +71,30 @@ export interface OrderDeclines {
   clear(orderId: string, driverId: string): Promise<void>;
 }
 
+/**
+ * The driver wallets' storage (D-25, src/cloud/driver-wallets.ts, ADR 0003). Balances are never
+ * stored: they are derived from the entries and the drivers' delivered orders on every read.
+ */
+export interface DriverWallets {
+  now(): Date;
+  wallet(driverId: string): Promise<DriverWalletDoc | null>;
+  wallets(driverIds?: readonly string[]): Promise<DriverWalletDoc[]>;
+  open(driverId: string, startsAt: Date, by: WalletActor): Promise<DriverWalletDoc>;
+  close(driverId: string): Promise<void>;
+  setAlert(driverId: string, level: WalletLevel): Promise<void>;
+  claimAlert(driverId: string, level: WalletLevel): Promise<boolean>;
+  addEntry(entry: NewWalletEntry): Promise<{ entry: WalletEntryDoc; created: boolean }>;
+  entry(entryId: string): Promise<WalletEntryDoc | null>;
+  entries(driverIds: readonly string[]): Promise<WalletEntryDoc[]>;
+  voidEntry(entryId: string, by: WalletActor, reason: string): Promise<boolean>;
+  orderRows(
+    windows: readonly WalletWindow[],
+    opts?: { credits?: boolean },
+  ): Promise<OrderUnitRow[]>;
+  orderTotals(windows: readonly WalletWindow[]): Promise<Map<string, number>>;
+  probeOrder(orderId: string, windows: readonly WalletWindow[]): Promise<OrderUnitRow | null>;
+}
+
 /** Deletes a stored file through the files adapter, in-process (D-5). */
 export interface FileStore {
   deleteFile(name: string): Promise<void>;
@@ -87,6 +120,7 @@ export interface CloudDeps {
   claims: OrderClaims;
   offers: DriverOffers;
   declines: OrderDeclines;
+  wallets: DriverWallets;
   files: FileStore;
   random: Random;
   logger: Logger;

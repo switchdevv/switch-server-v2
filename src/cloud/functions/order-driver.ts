@@ -6,6 +6,7 @@ import { requireUser } from '../guards.js';
 import { notifyStaff, sendPush } from '../notify.js';
 import { notifyOpsDriverDeclined } from '../ops-channels.js';
 import { CLASSES } from '../pointers.js';
+import { afterWalletChange } from '../wallet-book.js';
 
 export const orderDriverFunctions: FunctionTable = {
   // Returns nothing (the response body is `{}`), unlike the other order functions.
@@ -175,6 +176,10 @@ export const orderDriverFunctions: FunctionTable = {
     const order = (await query.first({ useMasterKey: true }))!;
     order.set('status', 3);
     await order.save(null, { useMasterKey: true });
+    // D-25: the delivery is now in the driver's wallet (it is derived from the orders); warn them
+    // once when it runs low or out. Detached, so the answer and its timing stay legacy's.
+    const driverId = order.get('driver')?.id as string | undefined;
+    if (driverId) detach(deps, 'wallet after delivery', afterWalletChange(deps, driverId));
     const user = order.get('user');
     const pushToken = user.get('pushToken');
     if (pushToken && pushToken.food) {

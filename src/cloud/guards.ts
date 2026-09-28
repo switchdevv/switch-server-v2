@@ -1,6 +1,6 @@
 import type { CloudDeps, FunctionRequest, ParseObject, ParseUser } from './context.js';
 import { CLOUD_ERRORS } from './errors.js';
-import { isActiveAdmin } from './staff-accounts.js';
+import { financeRoleOf, isActiveAdmin } from './staff-accounts.js';
 
 /** Guard **U**: `if (!req.user) throw USER_UNAUTHENTICATED`. */
 export function requireUser(req: FunctionRequest): ParseUser {
@@ -45,4 +45,27 @@ export async function requireAdmin(req: FunctionRequest, deps: CloudDeps): Promi
   const user = await requireStaff(req, deps);
   if (!(await callerIsAdmin(deps, user))) throw CLOUD_ERRORS.ADMIN_REQUIRED;
   return user;
+}
+
+export type FinanceRole = 'admin' | 'member';
+
+/**
+ * Guard **F** (D-25, not in legacy): a switch-finance user by the caller's current row — an
+ * admin, or a staff account granted `financeAccess` — and an admin when `need` says so. Thrown
+ * as Parse.Errors (209, then 119 `FINANCE_REQUIRED` / `ADMIN_REQUIRED`), which switch-finance
+ * reads by code and message.
+ */
+export async function requireFinance(
+  req: FunctionRequest,
+  deps: CloudDeps,
+  need: FinanceRole = 'member',
+): Promise<{ user: ParseUser; role: FinanceRole }> {
+  const { Parse } = deps;
+  if (!req.user) throw new Parse.Error(Parse.Error.INVALID_SESSION_TOKEN, 'Sign in first.');
+  const caller = await freshCaller(deps, req.user);
+  const role = financeRoleOf(caller);
+  if (!caller || !role) throw new Parse.Error(Parse.Error.OPERATION_FORBIDDEN, 'FINANCE_REQUIRED');
+  if (need === 'admin' && role !== 'admin')
+    throw new Parse.Error(Parse.Error.OPERATION_FORBIDDEN, 'ADMIN_REQUIRED');
+  return { user: caller, role };
 }

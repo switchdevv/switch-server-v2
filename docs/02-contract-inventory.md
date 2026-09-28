@@ -173,6 +173,33 @@ staff-tagged target in the batch). New functions, all guard A:
 Refusals: `PARAMS_MISSING`, `SELF_NOT_ALLOWED` (the caller as target), `NOT_STAFF_ACCOUNT`,
 `USER_DOES_NOT_EXISTS`.
 
+**Added in v2 for drivers' prepaid wallets** (D-25, [ADR 0003](adr/0003-driver-wallet-derived-ledger.md);
+spec `switch-finance/docs/driver-wallet-backend.md`). Guard **F** (`requireFinance`) = the
+caller's current row is switch-finance's: an enabled staff account that is `Admin` or holds
+`financeAccess`, else `119 FINANCE_REQUIRED` (`119 ADMIN_REQUIRED` for the admin-only ones).
+These throw `Parse.Error`s: `209` without a session, `102 WALLET_INVALID_PARAMS`, `101
+WALLET_DRIVER_NOT_FOUND` / `WALLET_NOT_STARTED` / `WALLET_ENTRY_NOT_FOUND`, `142` for a refused
+operation (`WALLET_NOT_A_DRIVER`, `WALLET_NO_CITY`, `WALLET_NO_SERVICE_FEE`,
+`WALLET_NOTHING_TO_REFUND`, `WALLET_REFUND_EXCEEDS_BALANCE`, `WALLET_REQUEST_REUSED`,
+`WALLET_ENTRY_VOIDED`, `WALLET_ENTRY_NOT_VOIDABLE`). Amounts are DA; `units` are hundredths of an
+order; dates are ISO strings.
+
+| Function | Guard | Params | Returns |
+|---|---|---|---|
+| `getMyWallet` | U (driver app) | — | `{ enforced, state: 'off'\|'ok'\|'low'\|'empty', ordersLeft, canGoOnline, minOrders, lowOrders }` — never an amount of money |
+| `listDriverWallets` | F | — | `{ settings, wallets: [{ driverId, startsAt, closedAt, units, ordersLeft, value, unitPriceToday, currency, level, lastTopUp }] }` |
+| `getDriverWallet` | F | `driverId, from?, to?` (≤400 days; last 30 by default) | `{ settings, pricing: { unitPriceToday, currency }, ledger: null \| { summary, range, lines (newest first, ≤3000), truncated } }` |
+| `recordWalletTopUp` | F | `driverId, orders (int ≥1), method: 'cash'\|'transfer'\|'carriedOver', requestId, reference?, note?, startsAt?` | `{ entry, summary }`. Priced at the driver's city `fees.food.service` today; opens (or reopens) the wallet; pushes the driver a receipt |
+| `recordWalletRefund` | F | `driverId, requestId, orders?` (default all), `close?` (full refund only), `note?`, `dryRun?` | `{ entry, summary }`; the oldest orders go first, each at its own price. `dryRun: true` (no `requestId`) records nothing: `{ preview: { units, amount } }` |
+| `recordWalletAdjustment` | F admin | `driverId, requestId, orders (±int), reason, unitPrice?` (adds only; default today's fee, 0 = no cash value) | `{ entry, summary }` |
+| `voidWalletEntry` | F admin | `entryId, reason` | `{ summary }`; the entry stays on the ledger, out of every balance |
+
+`requestId` is the entry's key: a retry of the same request is recorded once. After a refund,
+negative adjustment or void that leaves an enforced wallet empty, the driver is set offline.
+`finishDriver`, `editOrder`, `assignDriver`, `chooseDriver` and `deleteOrders` answer exactly as
+before; after their write they note on the affected wallets' ledgers what the change gave back or
+took, and warn the driver (§5 P-wallet), all in the background.
+
 ### 3.3 Triggers (11)
 
 | Trigger | Legacy behaviour |
@@ -188,6 +215,11 @@ Refusals: `PARAMS_MISSING`, `SELF_NOT_ALLOWED` (the caller as target), `NOT_STAF
 | `afterDelete Promo` | No remaining **unexpired** promo for that store → `isPromo = false`. |
 | `afterSave Message` | Staff push `newMessage` (§5). Reads `req.user.get('city')` first, so a master-key save throws before doing anything (swallowed by Parse — Q-8). |
 | `afterSave Review` | Copy `req.user.city` onto the review (re-saves it); then add `rating` to the store's (`ratingTotal`, `reviews`, `rating` rounded to 1 decimal) or the driver's (`driverParams.{ratingTotal, reviews}`, `driverRating`) totals, only if that store/driver is `enabled`. Runs on **every** save with a user, including edits (Q-8). |
+
+v2 adds `beforeSave _User` (not in legacy): D-22 refuses non-master writes of `opsAccess`,
+`financeAccess` and `staffType` (`119`); D-25 refuses a non-master save that turns
+`driverActive` on while Config `driverWallet.enforced` and the driver's wallet holds fewer than
+`minOrders` orders (`142 WALLET_EMPTY`; a signup is not refused, it is saved offline).
 
 `afterSave`/`afterDelete` errors are logged and swallowed by Parse Server in both 4.3
 (`RestWrite.js` "afterSave caught an error") and 9.x, and the trigger is awaited before the
@@ -255,6 +287,7 @@ existing typo `طلب جدبد`), with `%s` → `#<orderId>`, fallback language 
 | P-arrived | customer | `arrived` | `{id, icon:'arrived', button: viewOrder, screen:'OrderDetails'}` |
 | P-rate | customer | *(none — data only)* | `{rate:"true", orderId, id: driverId, restaurantId}` |
 | P-cancel | customer / manager / driver | `canceledTo`, `canceledFromManager + ' ' + store.name`, `canceledNoDriver`; `cancelManager` adds `body = translations.reason + ': ' + <reason>` when a reason is given | `{id, cancel:"true", icon:'error'}` |
+| P-wallet (v2, D-25) | driver (`pushToken.driver`) | in the driver's language (`src/domain/wallet-messages.ts`, not the legacy table), orders only: low (`Only 10 orders left`), empty, top-up receipt | `{wallet:"refresh", icon: 'alert'\|'error'\|'success'}`, `tag: 'wallet'` |
 | P-sendPush | anyone (staff-chosen) | staff-chosen | staff-chosen — **must be forwarded untouched** (see the `icon` contract in switch-ops notes: an unknown `data.icon` crashes installed app builds) |
 
 **Pusher:** `pusher.trigger(<driver objectId>, 'orderEvent', {data: {id: orderId}})`, TLS, cluster
@@ -279,7 +312,9 @@ read — v2's adapter must produce the identical string (test F-1).
 ## 6. Parse Config keys (read by server or clients)
 
 Server reads: `tripDuration {preparationTime, timePerKm}`, `driverRealtime`,
-`noDriverHandleAdmin`, `sendNotifsToAll`, `sendManagerNotifs`.
+`noDriverHandleAdmin`, `sendNotifsToAll`, `sendManagerNotifs`, and (v2, D-25)
+`driverWallet {enforced, minOrders, lowOrders}` (missing = `{false, 1, 10}`; admins set it from
+switch-finance through `updateConfigs`).
 Clients read (server must not remove or rename): `supportNumbers`, `storeUrls`, `pickupEnabled`,
 `homeSections`, `cartFloatButton`, `showSmsHashButton`, `supplementsAutoComplete`, plus the above.
 Values live in `_GlobalConfig` in the database — **v2 never writes Config at boot.**
@@ -295,6 +330,13 @@ Parse Dashboard). The repo's `_SCHEMA.json` is a **2023 snapshot** and is out of
 Schema, CLPs and indexes are owned by the Parse Dashboard / Atlas — **v2 must not create, alter
 or delete any of them at boot** (plan §6.2 lists the few indexes Parse Server itself creates, and
 how they're handled).
+
+v2 also keeps its own MongoDB collections, which are **not** Parse classes and which no client
+can reach: `agendaJobs` (shared with legacy), `driverOffers` (D-21), `driverWallets` and
+`driverWalletEntries` (D-25). `driverWalletEntries` is read by driver; an Atlas index
+`{ driverId: 1, at: -1 }` is worth adding once it grows (it is small: top-ups, refunds and
+staff-edit notes). The wallet balances read `Order` by driver and date, which is served by
+`{ _p_driver: 1, _created_at: -1 }` (`switch-ops/docs/backend-performance.md`).
 
 Relied-upon ACL shape: `_User` rows are `{"*":{"read":true},"<ownId>":{"read":true,"write":true}}`
 (switch-finance depends on public read), which is why `enforcePrivateUsers` must be `false`.

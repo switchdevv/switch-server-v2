@@ -11,6 +11,13 @@ import {
   type DriverOfferDoc,
   MongoDriverOffers,
 } from './cloud/driver-offers.js';
+import {
+  DRIVER_WALLET_ENTRIES_COLLECTION,
+  DRIVER_WALLETS_COLLECTION,
+  type DriverWalletDoc,
+  MongoDriverWallets,
+  type WalletEntryDoc,
+} from './cloud/driver-wallets.js';
 import { registerCloud } from './cloud/index.js';
 import { MongoOrderClaims, type OrderDoc } from './cloud/order-claims.js';
 import { MongoOrderDeclines, type OrderDeclineDoc } from './cloud/order-declines.js';
@@ -143,6 +150,13 @@ export async function createApp(env: Env, overrides: AppOverrides = {}): Promise
     env.AGENDA_LOCK_LIFETIME_MS,
   );
 
+  const wallets = new MongoDriverWallets(
+    mongo.db().collection<DriverWalletDoc>(DRIVER_WALLETS_COLLECTION),
+    mongo.db().collection<WalletEntryDoc>(DRIVER_WALLET_ENTRIES_COLLECTION),
+    mongo.db().collection(CLASSES.order),
+    now,
+  );
+
   // `Parse` is only known once Parse Server calls `cloud(Parse)`; deps is completed there.
   const deps = {
     env,
@@ -156,6 +170,7 @@ export async function createApp(env: Env, overrides: AppOverrides = {}): Promise
       mongo.db().collection<DriverOfferDoc>(DRIVER_OFFERS_COLLECTION),
       now,
     ),
+    wallets,
   } as Omit<CloudDeps, 'Parse' | 'dispatch'> as CloudDeps;
   const dispatchCtx = { deps, store: agendaStore, now };
   deps.dispatch = createDispatchScheduler(dispatchCtx);

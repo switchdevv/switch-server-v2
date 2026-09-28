@@ -67,7 +67,7 @@ const LEGACY_TRIGGERS = [
   'afterSave Message',
   'afterSave Review',
 ];
-// Additions over legacy, each a deliberate deviation (01-rewrite-plan.md §9, D-22, D-23, D-24).
+// Additions over legacy, each a deliberate deviation (01-rewrite-plan.md §9, D-22 … D-25).
 const ADDED_FUNCTIONS = [
   'setOpsAccess',
   'setFinanceAccess',
@@ -76,6 +76,13 @@ const ADDED_FUNCTIONS = [
   'signOutStaff',
   'removeStaff',
   'recountRatings',
+  'getMyWallet',
+  'listDriverWallets',
+  'getDriverWallet',
+  'recordWalletTopUp',
+  'recordWalletRefund',
+  'recordWalletAdjustment',
+  'voidWalletEntry',
 ];
 const ADDED_TRIGGERS = ['beforeSave _User'];
 

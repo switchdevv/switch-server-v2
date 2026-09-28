@@ -4,24 +4,29 @@ import { CLOUD_ERRORS } from '../errors.js';
 import { requireStaff } from '../guards.js';
 import { notifyDriverNewOrder, recordOffer, sendPush } from '../notify.js';
 import { CLASSES, pointer } from '../pointers.js';
+import { recordOrderChange, walletOrderBefore } from '../wallet-book.js';
 
 export const staffOrderFunctions: FunctionTable = {
   async deleteOrders(req, deps) {
-    await requireStaff(req, deps);
+    const staff = await requireStaff(req, deps);
     const { ids } = req.params as Record<string, unknown>;
     if (!ids) throw CLOUD_ERRORS.PARAMS_MISSING;
     for (const id of ids as unknown[]) {
       const query = new deps.Parse.Query(CLASSES.order);
       query.equalTo('objectId', id);
       const obj = (await query.first({ useMasterKey: true }))!;
+      // D-25: a delivered order leaving a wallet gives its order back; say so on the ledger.
+      const before = await walletOrderBefore(deps, id);
       await obj.destroy({ useMasterKey: true });
+      if (before)
+        detach(deps, 'wallet order change', recordOrderChange(deps, staff, id as string, before));
     }
     return 1;
   },
 
   async editOrder(req, deps) {
     const { Parse } = deps;
-    await requireStaff(req, deps);
+    const staff = await requireStaff(req, deps);
     const { id, status, canceled, options, foodIds } = req.params as Record<string, unknown>;
     if (!id) throw CLOUD_ERRORS.PARAMS_MISSING;
     const query = new Parse.Query(CLASSES.order);
@@ -37,7 +42,11 @@ export const staffOrderFunctions: FunctionTable = {
           'food',
           (foodIds as unknown[]).map((foodId) => pointer(Parse, CLASSES.product, foodId)),
         );
+      // D-25: a delivered order's status, cancel or money moves orders in its driver's wallet.
+      const before = await walletOrderBefore(deps, order.id);
       await order.save(null, { useMasterKey: true });
+      if (before)
+        detach(deps, 'wallet order change', recordOrderChange(deps, staff, order.id!, before));
     }
     return 1;
   },
@@ -62,7 +71,11 @@ export const staffOrderFunctions: FunctionTable = {
     const order = (await query2.first({ useMasterKey: true }))!;
     order.set('canceled', false);
     order.set('driver', null);
+    // D-25: taking a delivered order off its driver gives the order back to their wallet.
+    const before = await walletOrderBefore(deps, order.id);
     await order.save(null, { useMasterKey: true });
+    if (before)
+      detach(deps, 'wallet order change', recordOrderChange(deps, staff, order.id!, before));
     // Sent to this driver again: their earlier "no" no longer describes the offer (D-23).
     await deps.declines.clear(order.id!, driver.id!);
     const config = await Parse.Config.get();
@@ -76,7 +89,7 @@ export const staffOrderFunctions: FunctionTable = {
 
   async chooseDriver(req, deps) {
     const { Parse } = deps;
-    await requireStaff(req, deps);
+    const staff = await requireStaff(req, deps);
     const { orderId } = req.params as Record<string, unknown>;
     if (!orderId) throw CLOUD_ERRORS.PARAMS_MISSING;
     const query = new Parse.Query(CLASSES.order);
@@ -84,7 +97,10 @@ export const staffOrderFunctions: FunctionTable = {
     const order = (await query.first({ useMasterKey: true }))!;
     order.set('canceled', false);
     order.set('driver', null);
+    const before = await walletOrderBefore(deps, order.id);
     await order.save(null, { useMasterKey: true });
+    if (before)
+      detach(deps, 'wallet order change', recordOrderChange(deps, staff, order.id!, before));
     detach(deps, 'chooseDriver', deps.dispatch.start({ objectId: orderId }));
     return 1;
   },

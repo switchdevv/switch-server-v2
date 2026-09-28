@@ -43,6 +43,20 @@ export function isActiveAdmin(user: { get(key: string): unknown } | undefined): 
   );
 }
 
+/**
+ * switch-finance's access ladder (its src/lib/auth/access.ts `financeRole`), for the wallet
+ * functions (D-25): disabled → none; not a staff account → none; Admin → 'admin'; a Staff
+ * account granted `financeAccess` → 'member'.
+ */
+export function financeRoleOf(
+  user: { get(key: string): unknown } | undefined,
+): 'admin' | 'member' | null {
+  if (!user || user.get('enabled') === false) return null;
+  if (!isStaffAccount(user.get('staffType'), user.get('appType'))) return null;
+  if (staffTypeOf(user.get('staffType')) === 'admin') return 'admin';
+  return user.get('financeAccess') === true ? 'member' : null;
+}
+
 /** Whether `appType` gains 'staff' or 'admin' going from `before` to `after`. */
 export function addsStaffAppType(before: unknown, after: unknown): boolean {
   const had = Array.isArray(before) ? before : [];

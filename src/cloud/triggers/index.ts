@@ -1,10 +1,12 @@
 // Port of the legacy triggers: cloud/auth/auth.js (login/logout), cloud/files/files.js,
 // cloud/food/food.js, cloud/list/list.js, cloud/promo/promo.js, cloud/message/message.js,
 // cloud/reviews/reviews.js. Plus one addition: `beforeSave _User`, the boundary behind
-// setOpsAccess/setFinanceAccess (functions/staff-access.ts).
+// setOpsAccess/setFinanceAccess (functions/staff-access.ts) and the driver wallet's online
+// gate (D-25).
 //
 // afterSave/afterDelete errors are logged and swallowed by Parse Server (4.3 and 9.x alike), and
 // the trigger is awaited before the response. The ports below rely on that.
+import { canGoOnline } from '../../domain/driver-wallet.js';
 import { addRating } from '../../domain/ratings.js';
 import { detach, type CloudDeps, type ParseObject, type ParseUser } from '../context.js';
 import { CLOUD_ERRORS } from '../errors.js';
@@ -12,6 +14,7 @@ import { deleteFileByName, FILE_CLASS } from '../functions/files.js';
 import { ACCESS_FIELDS } from '../functions/staff-access.js';
 import { notifyStaff } from '../notify.js';
 import { CLASSES } from '../pointers.js';
+import { walletSettings, walletUnits } from '../wallet-book.js';
 
 /** The request fields the triggers use (Parse's own request types differ per trigger kind). */
 export interface TriggerReq {
@@ -67,10 +70,17 @@ export const TRIGGERS: Record<string, TriggerSpec> = {
   // Ops/finance access, or give itself a staffType (an Admin one is admin in both consoles). Only
   // master-key writes may: the grant functions, editUser/addUser and Parse Dashboard. A signup
   // may carry no staffType (the apps send none); appType stays free, the apps append to it.
+  //
+  // D-25: a driver goes online by saving `driverActive: true` on their own row (switch-driver
+  // Home.js), so this is also where an enforced wallet with too few orders refuses it: 142
+  // WALLET_EMPTY, which the app reads as "top up". Every way of getting orders needs
+  // `driverActive` (the search, assignDriver, the ops queue). A signup can't be refused over it,
+  // so a new account just starts offline. Saves that don't turn it on never read the wallet.
   'beforeSave _User': {
     kind: 'beforeSave',
     className: '_User',
-    async handler({ object, master }, { Parse }) {
+    async handler({ object, master }, deps) {
+      const { Parse } = deps;
       if (master) return;
       const created = !object.existed();
       for (const field of [...Object.values(ACCESS_FIELDS), 'staffType']) {
@@ -81,6 +91,17 @@ export const TRIGGERS: Record<string, TriggerSpec> = {
             `${field} can only be changed by an admin.`,
           );
       }
+      const goingOnline =
+        object.get('driverActive') === true && (created || object.dirty('driverActive'));
+      if (!goingOnline) return;
+      const settings = await walletSettings(deps);
+      if (!settings.enforced) return;
+      if (created) {
+        object.set('driverActive', false);
+        return;
+      }
+      if (!canGoOnline(await walletUnits(deps, object.id!), settings))
+        throw new Parse.Error(Parse.Error.VALIDATION_ERROR, 'WALLET_EMPTY');
     },
   },
 

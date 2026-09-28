@@ -1,5 +1,6 @@
 import type { CloudDeps, FunctionTable, ParseSdk } from './context.js';
 import { authFunctions } from './functions/auth.js';
+import { driverWalletFunctions } from './functions/driver-wallet.js';
 import { fileFunctions } from './functions/files.js';
 import { orderDriverFunctions } from './functions/order-driver.js';
 import { orderFoodFunctions } from './functions/order-food.js';
@@ -30,6 +31,7 @@ const TABLES: FunctionTable[] = [
   staffAccessFunctions,
   staffAdminFunctions,
   staffRealtimeFunctions,
+  driverWalletFunctions,
 ];
 
 /** The single registry: every cloud function by name (a test pins the 50 legacy names + the additions). */

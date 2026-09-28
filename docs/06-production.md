@@ -80,7 +80,7 @@ flowchart LR
 | Hosting | App Engine, project `switch-proj`, service `default`, F2, 0–5 instances | same app and service, different versions |
 | Database | production MongoDB Atlas cluster, database `switchDB` | **yes**, the same data |
 | Push | Firebase project `switch-proj` (the apps' own) | yes |
-| Realtime | the production Pusher app (key `b4cb8ea88897dba8ec3b`) | yes |
+| Realtime | the production Pusher app (key `337b658e660ec3f09bd3`) | yes |
 | Email · SMS · Distance | SendGrid · SMS Algérie · Google Maps | yes |
 | Files | DigitalOcean Spaces, bucket `switchfood` | yes |
 | Secrets | Secret Manager `switch-server-env` in switch-proj | no: legacy's are in `configs.js` |
@@ -211,7 +211,7 @@ mirrors legacy's `configs.js` already. Check or set:
 |---|---|
 | `PARSE_PUBLIC_SERVER_URL` | `https://api.switchfood.net`. Don't change it: email links and file URLs are built from it. |
 | `SECRETS_PROJECT` | `switch-proj` |
-| `PUSHER_APP_ID`, `PUSHER_KEY` | Pusher → Channels → the app whose key is **`b4cb8ea88897dba8ec3b`** (the one switch-ops and the driver app subscribe with) → App Keys. The preflight refuses them blank. If no app has that key, stop and find out which one the driver app uses. |
+| `PUSHER_APP_ID`, `PUSHER_KEY` | Pusher → Channels → the app whose key is **`337b658e660ec3f09bd3`** (app id `2196095`, the one switch-ops and the driver app subscribe with) → App Keys. The preflight refuses them blank. Not `b4cb8ea88897dba8ec3b` (the dev app, `.env.local`) or `431b35358841665c3ed0` (staging). |
 | `DISPATCH_WORKER_ENABLED` | `false` for the switch. Legacy's worker runs the jobs until the T+24 h step. |
 | `MASTER_KEY_IPS` | leave `0.0.0.0/0,::/0` while legacy exists (section 1, "Legacy next to v2") |
 | `CLIENT_IP_HEADER` | leave `x-appengine-user-ip` |
@@ -543,7 +543,7 @@ Break-glass, when GitHub is down (an operator account with App Engine Admin):
 gcloud app services set-traffic default --splits="<version>=1" --project="$PROJECT_ID"
 ```
 
-After a rollback to legacy:
+After a rollback to legacy (20240210t122703):
 
 - What v2 added answers `141 Invalid function` again: the ops and finance Access switches (D-22),
   switch-admin's admin functions (D-24) and driver declines (D-23). The consoles show "needs the
@@ -597,7 +597,7 @@ their release order.
 | After the switch, a legacy-only error in logs | Legacy's version is still running (instance, dispatch worker, its own calls into v2): expected until it is deleted. |
 | Pushes stop | `FIREBASE_SERVICE_ACCOUNT` lacks *FCM **API** Admin* (step 5), or its key was deleted. Send errors are logged as `newOrder send failed`. |
 | No OTP SMS / no email | `SMS_*` / `SENDGRID_API_KEY` in the secret (step 5); check the provider's dashboard. |
-| ops don't see driver declines live | `PUSHER_APP_ID`/`PUSHER_KEY` (step 4) or `PUSHER_SECRET` (step 5) aren't the app ops subscribe to (`b4cb8ea88897dba8ec3b`). |
+| ops don't see driver declines live | `PUSHER_APP_ID`/`PUSHER_KEY` (step 4) or `PUSHER_SECRET` (step 5) aren't the app ops subscribe to (`337b658e660ec3f09bd3`). |
 
 ---
 
