@@ -11,4 +11,9 @@ automatic_scaling:
   # Scales to zero when idle, so it costs nothing between test sessions. The dispatch worker only
   # runs while an instance is up: set 1 while testing automatic dispatch rounds.
   min_instances: 0
-  max_instances: 2
+  max_instances: 5
+  max_concurrent_requests: 70
+  target_cpu_utilization: 0.9
+  target_throughput_utilization: 0.9
+  min_pending_latency: 30ms
+  max_pending_latency: automatic
