@@ -77,7 +77,7 @@ flowchart LR
 
 | Service | Production | Shared with legacy? |
 |---|---|---|
-| Hosting | App Engine, project `switch-proj`, service `default`, F2, 0–5 instances | same app and service, different versions |
+| Hosting | App Engine, project `switch-proj`, service `default`, F1, 0–5 instances | same app and service, different versions |
 | Database | production MongoDB Atlas cluster, database `switchDB` | **yes**, the same data |
 | Push | Firebase project `switch-proj` (the apps' own) | yes |
 | Realtime | the production Pusher app (key `337b658e660ec3f09bd3`) | yes |
@@ -305,7 +305,7 @@ In the Google Cloud console, project `switch-proj`, Monitoring:
 |---|---|
 | Server errors | 5xx share of `default` above **1% for 5 min**. In the PromQL editor (or the same ratio built in the UI): `sum(rate(appengine_googleapis_com:http_server_response_count{monitored_resource="gae_app",module_id="default",response_code=~"5.."}[5m])) / sum(rate(appengine_googleapis_com:http_server_response_count{monitored_resource="gae_app",module_id="default"}[5m])) > 0.01` |
 | Slow | `App Engine › http/server/response_latencies`, 95th percentile, service `default`, above **1.5× legacy's p95** (read it in Metrics Explorer for the week before the switch) for 10 min |
-| Memory | `App Engine › system/memory/usage`, service `default`, above **600 MB** (80% of F2's 768 MB) for 10 min |
+| Memory | `App Engine › system/memory/usage`, service `default`, above **300 MB** (80% of F1's 384 MB) for 10 min. If it fires, go back to F2 in `app.yaml` |
 | Function failures | a log-based metric (Logging → Log-based metrics → Counter) on `resource.type="gae_app" AND jsonPayload.msg="cloud function failed"`, labelled by `jsonPayload.fn`. Alert when it jumps above its usual rate. |
 | Dispatch failures | log-based metric on `jsonPayload.msg=("dispatch job failed" OR "dispatch scan failed")`, alert on any |
 

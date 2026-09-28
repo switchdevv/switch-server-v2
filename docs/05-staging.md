@@ -344,7 +344,7 @@ which it must not do: turn the master key off (`MASTER_KEY_IPS=` empty) until th
 | Stop borrowing a production account | Create the staging account, remove its name from `SHARED_PROD_CREDENTIALS`, `pnpm staging:secret` with the new key, commit, push. |
 | Test automatic dispatch rounds | Staging scales to zero when idle, and the dispatch worker only runs while an instance is up. Set `min_instances: 1` in `app.staging.yaml` for the session. |
 
-Costs: App Engine (F2) scales to zero between sessions; Atlas M0 is free; builds and stored images
+Costs: App Engine (F1) scales to zero between sessions; Atlas M0 is free; builds and stored images
 are small. SMS and map lookups are billed to the production accounts; the SMS allowlist keeps that
 to testers' phones.
 

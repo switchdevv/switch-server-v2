@@ -702,7 +702,7 @@ against production.
 | OD-5 | Rehearsal on a restored prod copy (contains personal data) | Yes, in a temporary locked-down cluster, destroyed after Phase 5. |
 | OD-6 | `MASTER_KEY_IPS` | Your admin IPs. If dynamic, keep `0.0.0.0/0,::/0` for cutover (same as today) and tighten later. |
 | OD-7 | Real push to test phones in staging | Recording fake by default. Optional "device lab" mode using the prod Firebase project with a **hard token allowlist** (tester phones only), since production app builds only receive prod-project pushes. |
-| OD-8 | Instance class | F2, confirmed by P4-5. |
+| OD-8 | Instance class | **Decided 2026-09-28:** F1, like legacy. The staging load test (400 users, reads) had no server errors on F1; connection timeouts came from the test machine. Back to F2 if memory nears 300 MB. |
 
 ---
 
