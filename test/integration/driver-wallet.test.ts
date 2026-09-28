@@ -561,7 +561,6 @@ describe('the driver’s own history', () => {
     hasWallet: boolean;
     lines: Line[];
     next: string | null;
-    recent: Record<string, unknown> | null;
   }
   const history = (who: Session, params: Record<string, unknown> = {}) =>
     call<History>('getMyWalletHistory', params, who);
@@ -587,7 +586,6 @@ describe('the driver’s own history', () => {
       hasWallet: false,
       lines: [],
       next: null,
-      recent: null,
     });
   });
 
@@ -634,7 +632,6 @@ describe('the driver’s own history', () => {
     expect(topUpLine).toMatchObject({ method: 'cash', orderId: null });
     // No price, amount, reference, staff name or note: the driver app never shows money.
     for (const line of result.lines) expect(Object.keys(line).sort()).toEqual(LINE_KEYS);
-    expect(result.recent).toMatchObject({ deliveries: 2, used: 0, added: 1500 });
     expect(await call('getMyWallet', {}, driver)).toMatchObject({
       hasWallet: true,
       ordersLeft: 14,
@@ -646,10 +643,8 @@ describe('the driver’s own history', () => {
     await topUp(driver.id, 10);
     for (let i = 0; i < 4; i++) await deliver(driver);
     const first = await history(driver, { limit: 2 });
-    expect(first.recent).toMatchObject({ deliveries: 4, used: 400, added: 1000 });
     expect(first.next).toBe(first.lines[1]!.cursor);
     const second = await history(driver, { limit: 2, before: first.next });
-    expect(second.recent).toBeNull();
     const third = await history(driver, { limit: 2, before: second.next });
     expect(third.next).toBeNull();
     const all = [...first.lines, ...second.lines, ...third.lines];

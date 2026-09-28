@@ -169,7 +169,7 @@ export const driverWalletFunctions: FunctionTable = {
     if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > HISTORY_MAX)
       badParams(deps);
     const book = await walletBook(deps, user.id!);
-    if (!book) return { hasWallet: false, lines: [], next: null, recent: null };
+    if (!book) return { hasWallet: false, lines: [], next: null };
     return { hasWallet: true, ...(await walletHistory(deps, book, { before, limit })) };
   },
 

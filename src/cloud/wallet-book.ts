@@ -444,11 +444,8 @@ export interface MyWalletHistory {
   lines: MyWalletLine[];
   /** The `before` of the next page, or null on the last one. */
   next: string | null;
-  /** The last `RECENT_DAYS`, in hundredths: first page only. */
-  recent: { since: string; deliveries: number; used: number; added: number } | null;
 }
 
-export const RECENT_DAYS = 30;
 const cursorOf = (at: Date, id: string) => `${at.getTime()}.${id}`;
 
 function myLine(event: Walked): MyWalletLine | null {
@@ -520,24 +517,9 @@ export async function walletHistory(
   }
   const page = lines.slice(start, start + opts.limit);
   const more = start + page.length < lines.length;
-
-  let recent: MyWalletHistory['recent'] = null;
-  if (!opts.before) {
-    const since = new Date(deps.wallets.now().getTime() - RECENT_DAYS * 24 * 3600e3);
-    recent = { since: since.toISOString(), deliveries: 0, used: 0, added: 0 };
-    for (const line of lines) {
-      if (Date.parse(line.at) < since.getTime()) break;
-      if (line.kind === 'delivery') {
-        recent.deliveries += 1;
-        if (line.units < 0) recent.used -= line.units;
-      }
-      if (line.counted && line.units > 0) recent.added += line.units;
-    }
-  }
   return {
     lines: page,
     next: more && page.length > 0 ? page[page.length - 1]!.cursor : null,
-    recent,
   };
 }
 
