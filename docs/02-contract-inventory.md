@@ -186,9 +186,10 @@ order; dates are ISO strings.
 
 | Function | Guard | Params | Returns |
 |---|---|---|---|
-| `getMyWallet` | U (driver app) | — | `{ enforced, state: 'off'\|'ok'\|'low'\|'empty', ordersLeft, canGoOnline, minOrders, lowOrders }` — never an amount of money |
-| `listDriverWallets` | F | — | `{ settings, wallets: [{ driverId, startsAt, closedAt, units, ordersLeft, value, unitPriceToday, currency, level, lastTopUp }] }` |
-| `getDriverWallet` | F | `driverId, from?, to?` (≤400 days; last 30 by default) | `{ settings, pricing: { unitPriceToday, currency }, ledger: null \| { summary, range, lines (newest first, ≤3000), truncated } }` |
+| `getMyWallet` | U (driver app) | — | `{ enforced, state: 'off'\|'ok'\|'low'\|'empty', ordersLeft, canGoOnline, minOrders, lowOrders, hasWallet }` for the driver's region — never an amount of money |
+| `getMyWalletHistory` | U (driver app) | `before?` (a line's `cursor`), `limit?` (1–100, default 30) | `{ hasWallet, lines: [{ cursor, id, kind: 'topup'\|'refund'\|'adjustment'\|'delivery'\|'orderChange', at, units, counted, voided, balanceAfter, method, orderId, freeDelivery, paidInCash, change }] (newest first), next, recent: { since, deliveries, used, added } \| null (first page only, last 30 days) }` — the caller's own wallet, in hundredths of an order; no price, amount, reference, staff name or note |
+| `listDriverWallets` | F | — | `{ config, wallets: [{ driverId, startsAt, closedAt, units, ordersLeft, value, unitPriceToday, currency, level, enforced, lastTopUp }] }` (`config` = Config `driverWallet`, regions included) |
+| `getDriverWallet` | F | `driverId, from?, to?` (≤400 days; last 30 by default) | `{ settings (this driver's region), pricing: { unitPriceToday, currency }, ledger: null \| { summary, range, lines (newest first, ≤3000), truncated } }` |
 | `recordWalletTopUp` | F | `driverId, orders (int ≥1), method: 'cash'\|'transfer'\|'carriedOver', requestId, reference?, note?, startsAt?` | `{ entry, summary }`. Priced at the driver's city `fees.food.service` today; opens (or reopens) the wallet; pushes the driver a receipt |
 | `recordWalletRefund` | F | `driverId, requestId, orders?` (default all), `close?` (full refund only), `note?`, `dryRun?` | `{ entry, summary }`; the oldest orders go first, each at its own price. `dryRun: true` (no `requestId`) records nothing: `{ preview: { units, amount } }` |
 | `recordWalletAdjustment` | F admin | `driverId, requestId, orders (±int), reason, unitPrice?` (adds only; default today's fee, 0 = no cash value) | `{ entry, summary }` |
@@ -218,7 +219,7 @@ took, and warn the driver (§5 P-wallet), all in the background.
 
 v2 adds `beforeSave _User` (not in legacy): D-22 refuses non-master writes of `opsAccess`,
 `financeAccess` and `staffType` (`119`); D-25 refuses a non-master save that turns
-`driverActive` on while Config `driverWallet.enforced` and the driver's wallet holds fewer than
+`driverActive` on while the wallet is enforced for the driver's region (Config `driverWallet`) and holds fewer than
 `minOrders` orders (`142 WALLET_EMPTY`; a signup is not refused, it is saved offline).
 
 `afterSave`/`afterDelete` errors are logged and swallowed by Parse Server in both 4.3
@@ -313,7 +314,10 @@ read — v2's adapter must produce the identical string (test F-1).
 
 Server reads: `tripDuration {preparationTime, timePerKm}`, `driverRealtime`,
 `noDriverHandleAdmin`, `sendNotifsToAll`, `sendManagerNotifs`, and (v2, D-25)
-`driverWallet {enforced, minOrders, lowOrders}` (missing = `{false, 1, 10}`; admins set it from
+`driverWallet {enforced, minOrders, lowOrders, regions: {<cityId>: {enforced?, minOrders?, lowOrders?}}}`
+(missing = `{false, 1, 10}`, no region; the global `enforced` is a master switch — off enforces
+nothing, on enforces every region not set `enforced: false` — and a driver's thresholds are their
+region's where set, else the global ones; admins set it from
 switch-finance through `updateConfigs`).
 Clients read (server must not remove or rename): `supportNumbers`, `storeUrls`, `pickupEnabled`,
 `homeSections`, `cartFloatButton`, `showSmsHashButton`, `supplementsAutoComplete`, plus the above.

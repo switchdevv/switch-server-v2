@@ -6,7 +6,7 @@
 //
 // afterSave/afterDelete errors are logged and swallowed by Parse Server (4.3 and 9.x alike), and
 // the trigger is awaited before the response. The ports below rely on that.
-import { canGoOnline } from '../../domain/driver-wallet.js';
+import { canGoOnline, walletSettingsFor } from '../../domain/driver-wallet.js';
 import { addRating } from '../../domain/ratings.js';
 import { detach, type CloudDeps, type ParseObject, type ParseUser } from '../context.js';
 import { CLOUD_ERRORS } from '../errors.js';
@@ -14,7 +14,7 @@ import { deleteFileByName, FILE_CLASS } from '../functions/files.js';
 import { ACCESS_FIELDS } from '../functions/staff-access.js';
 import { notifyStaff } from '../notify.js';
 import { CLASSES } from '../pointers.js';
-import { walletSettings, walletUnits } from '../wallet-book.js';
+import { walletConfig, walletUnits } from '../wallet-book.js';
 
 /** The request fields the triggers use (Parse's own request types differ per trigger kind). */
 export interface TriggerReq {
@@ -94,7 +94,9 @@ export const TRIGGERS: Record<string, TriggerSpec> = {
       const goingOnline =
         object.get('driverActive') === true && (created || object.dirty('driverActive'));
       if (!goingOnline) return;
-      const settings = await walletSettings(deps);
+      // The rules of the driver's region (the row's `city`, as it will be saved), else global ones.
+      const cityId = (object.get('city') as { id?: string } | undefined)?.id ?? null;
+      const settings = walletSettingsFor(await walletConfig(deps), cityId);
       if (!settings.enforced) return;
       if (created) {
         object.set('driverActive', false);

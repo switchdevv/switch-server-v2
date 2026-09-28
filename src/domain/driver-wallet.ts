@@ -10,7 +10,7 @@
 /** Hundredths of an order in one order. */
 export const UNITS_PER_ORDER = 100;
 
-/** Parse Config `driverWallet`, as admins set it from switch-finance (through `updateConfigs`). */
+/** The rules one driver's wallet is held to: the global ones, or their region's where it sets any. */
 export interface WalletSettings {
   /** Off: nothing is refused and no alert is pushed. Balances are still kept. */
   enforced: boolean;
@@ -20,23 +20,67 @@ export interface WalletSettings {
   lowOrders: number;
 }
 
+/** A region's own values; a missing key follows the global one. */
+export type RegionWalletSettings = Partial<WalletSettings>;
+
+/**
+ * Parse Config `driverWallet`, as admins set it from switch-finance (through `updateConfigs`):
+ * the global rules, and per region (`City` objectId) only the values that region sets itself.
+ * The global `enforced` is a master switch: off, nothing is enforced anywhere; on, every region
+ * is, except one set `enforced: false` (left out). Thresholds: the region's own, else global.
+ */
+export interface WalletConfig extends WalletSettings {
+  regions: Record<string, RegionWalletSettings>;
+}
+
 export const DEFAULT_WALLET_SETTINGS: WalletSettings = {
   enforced: false,
   minOrders: 1,
   lowOrders: 10,
 };
 
-function wholeNumber(value: unknown, fallback: number): number {
-  return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : fallback;
+const isWhole = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isInteger(value) && value >= 0;
+
+/** A region's own values: kept only where they are well formed, so a bad one follows global. */
+function regionOf(value: unknown): RegionWalletSettings {
+  const raw = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
+  const region: RegionWalletSettings = {};
+  if (typeof raw.enforced === 'boolean') region.enforced = raw.enforced;
+  if (isWhole(raw.minOrders)) region.minOrders = raw.minOrders;
+  if (isWhole(raw.lowOrders)) region.lowOrders = raw.lowOrders;
+  return region;
 }
 
 /** Reads Config `driverWallet`; anything missing or malformed takes its default. */
-export function walletSettingsOf(value: unknown): WalletSettings {
+export function walletConfigOf(value: unknown): WalletConfig {
   const raw = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
+  const regions: Record<string, RegionWalletSettings> = {};
+  if (raw.regions && typeof raw.regions === 'object') {
+    for (const [cityId, region] of Object.entries(raw.regions as Record<string, unknown>)) {
+      const own = regionOf(region);
+      if (Object.keys(own).length > 0) regions[cityId] = own;
+    }
+  }
   return {
     enforced: raw.enforced === true,
-    minOrders: wholeNumber(raw.minOrders, DEFAULT_WALLET_SETTINGS.minOrders),
-    lowOrders: wholeNumber(raw.lowOrders, DEFAULT_WALLET_SETTINGS.lowOrders),
+    minOrders: isWhole(raw.minOrders) ? raw.minOrders : DEFAULT_WALLET_SETTINGS.minOrders,
+    lowOrders: isWhole(raw.lowOrders) ? raw.lowOrders : DEFAULT_WALLET_SETTINGS.lowOrders,
+    regions,
+  };
+}
+
+/**
+ * The rules for a driver in `cityId`: enforced only while the global switch is on and their
+ * region isn't left out; thresholds from their region where it sets one, else the global ones.
+ * A driver with no region follows the global rules.
+ */
+export function walletSettingsFor(config: WalletConfig, cityId: string | null): WalletSettings {
+  const region = (cityId && config.regions[cityId]) || {};
+  return {
+    enforced: config.enforced && region.enforced !== false,
+    minOrders: region.minOrders ?? config.minOrders,
+    lowOrders: region.lowOrders ?? config.lowOrders,
   };
 }
 

@@ -59,6 +59,14 @@ own row, and every way of getting orders needs `driverActive` (the automatic sea
 `assignDriver`, the ops queue). So refusing that save — `142 WALLET_EMPTY` — while the wallet is
 enforced and short is enough, reaches old app builds too, and costs nothing on other saves.
 
+**The rules are global, with regional overrides.** Config `driverWallet` holds `enforced`,
+`minOrders` and `lowOrders`, and under `regions.<cityId>` only the values a region sets itself.
+The global `enforced` is a master switch (the business's choice): off, nothing is enforced
+anywhere; on, every region is except one set `enforced: false`. Thresholds are the region's
+where set, else global (`walletSettingsFor`), read from the driver's current `city` on every
+check. It is one Config key written whole by
+`updateConfigs`: two admins saving at the same moment keep the last save.
+
 **Alerts and staff notes are side effects of the writes v2 owns.** After `finishDriver` and the
 four staff order functions, a detached step warns the driver once per level (a compare-and-set
 on the wallet's `alert`) and sets an empty driver offline. The staff functions also read the

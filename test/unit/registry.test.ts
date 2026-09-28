@@ -77,6 +77,7 @@ const ADDED_FUNCTIONS = [
   'removeStaff',
   'recountRatings',
   'getMyWallet',
+  'getMyWalletHistory',
   'listDriverWallets',
   'getDriverWallet',
   'recordWalletTopUp',

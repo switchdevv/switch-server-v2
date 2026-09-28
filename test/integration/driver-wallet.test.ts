@@ -443,6 +443,7 @@ describe('the online gate', () => {
       canGoOnline: true,
       minOrders: 1,
       lowOrders: 10,
+      hasWallet: false,
     });
     await setWallet({ enforced: true, minOrders: 1, lowOrders: 10 });
     expect(await mine()).toMatchObject({ state: 'empty', canGoOnline: false });
@@ -454,7 +455,232 @@ describe('the online gate', () => {
       canGoOnline: true,
       minOrders: 1,
       lowOrders: 10,
+      hasWallet: true,
     });
+  });
+});
+
+describe('rules by region', () => {
+  let oranId: string;
+  const oran = () => ptr('City', oranId);
+
+  beforeAll(async () => {
+    oranId = await api.create('City', {
+      name: 'Oran',
+      currency: 'dzd',
+      fees: { food: { ...FEES, service: 40 }, driver: FEES, manager: FEES },
+    });
+  });
+
+  const goOnline = (who: Session & { id: string }) =>
+    api.request('PUT', `/users/${who.id}`, { driverActive: true }, { session: who.session });
+
+  it('enforces nothing anywhere while the global switch is off, whatever a region says', async () => {
+    await setWallet({ enforced: false, regions: { [w.cityId]: { enforced: true } } });
+    const alger = await newDriver({ driverActive: false });
+    const oranDriver = await newDriver({ driverActive: false, city: oran() });
+    expect((await goOnline(alger)).status).toBe(200);
+    expect((await goOnline(oranDriver)).status).toBe(200);
+    expect(await call('getMyWallet', {}, alger)).toMatchObject({ enforced: false, state: 'off' });
+  });
+
+  it('enforces every region, and a driver with none, once the global switch is on', async () => {
+    await setWallet({ enforced: true });
+    const alger = await newDriver({ driverActive: false });
+    const nowhere = await makeDriver(api, 7, { driverActive: false });
+    expect((await goOnline(alger)).body).toEqual({ code: 142, error: 'WALLET_EMPTY' });
+    expect((await goOnline(nowhere)).body.code).toBe(142);
+  });
+
+  it('leaves a region out of a global switch', async () => {
+    await setWallet({ enforced: true, regions: { [w.cityId]: { enforced: false } } });
+    const alger = await newDriver({ driverActive: false });
+    const oranDriver = await newDriver({ driverActive: false, city: oran() });
+    expect((await goOnline(alger)).status).toBe(200);
+    expect((await goOnline(oranDriver)).body.code).toBe(142);
+  });
+
+  it('holds a driver to their region’s thresholds, the global ones where it sets none', async () => {
+    await setWallet({
+      enforced: true,
+      minOrders: 1,
+      lowOrders: 10,
+      regions: { [w.cityId]: { minOrders: 3, lowOrders: 5 } },
+    });
+    const alger = await newDriver({ driverActive: false });
+    await topUp(alger.id, 2);
+    expect((await goOnline(alger)).body.code).toBe(142);
+    expect(await call('getMyWallet', {}, alger)).toMatchObject({
+      state: 'empty',
+      minOrders: 3,
+      lowOrders: 5,
+      ordersLeft: 2,
+    });
+    const oranDriver = await newDriver({ driverActive: false, city: oran() });
+    await topUp(oranDriver.id, 2);
+    expect((await goOnline(oranDriver)).status).toBe(200);
+    expect(await call('getMyWallet', {}, oranDriver)).toMatchObject({
+      state: 'low',
+      minOrders: 1,
+      lowOrders: 10,
+    });
+  });
+
+  it('tells finance the rules, and which wallets are held to them', async () => {
+    const config = {
+      enforced: true,
+      minOrders: 1,
+      lowOrders: 10,
+      regions: { [oranId]: { enforced: false } },
+    };
+    await setWallet(config);
+    const alger = await newDriver();
+    const oranDriver = await newDriver({ city: oran() });
+    await topUp(alger.id, 1);
+    await topUp(oranDriver.id, 1);
+    const list = await call<{
+      config: unknown;
+      wallets: { driverId: string; enforced: boolean }[];
+    }>('listDriverWallets', {}, member);
+    expect(list.config).toEqual(config);
+    const byId = new Map(list.wallets.map((wallet) => [wallet.driverId, wallet]));
+    expect(byId.get(alger.id)?.enforced).toBe(true);
+    expect(byId.get(oranDriver.id)?.enforced).toBe(false);
+    const detail = await call<{ settings: unknown }>(
+      'getDriverWallet',
+      { driverId: alger.id },
+      member,
+    );
+    expect(detail.settings).toEqual({ enforced: true, minOrders: 1, lowOrders: 10 });
+  });
+});
+
+describe('the driver’s own history', () => {
+  type Line = Record<string, unknown> & { id: string; cursor: string; kind: string };
+  interface History {
+    hasWallet: boolean;
+    lines: Line[];
+    next: string | null;
+    recent: Record<string, unknown> | null;
+  }
+  const history = (who: Session, params: Record<string, unknown> = {}) =>
+    call<History>('getMyWalletHistory', params, who);
+  const LINE_KEYS = [
+    'cursor',
+    'id',
+    'kind',
+    'at',
+    'units',
+    'counted',
+    'voided',
+    'balanceAfter',
+    'method',
+    'orderId',
+    'freeDelivery',
+    'paidInCash',
+    'change',
+  ].sort();
+
+  it('is empty without a wallet', async () => {
+    const driver = await newDriver();
+    expect(await history(driver)).toEqual({
+      hasWallet: false,
+      lines: [],
+      next: null,
+      recent: null,
+    });
+  });
+
+  it('lists every movement newest first, in orders only', async () => {
+    const driver = await newDriver();
+    await topUp(driver.id, 10, { reference: 'R-1', note: 'at the office' });
+    const cash = await deliver(driver);
+    const free = await deliver(driver, { freeDelivery: true, delivery: 150 }); // 50 − 150: +2
+    const card = await deliver(driver, { paymentMethod: 'creditcards', delivery: 150 }); // +3
+    await call(
+      'recordWalletRefund',
+      { driverId: driver.id, orders: 1, requestId: randomUUID() },
+      member,
+    );
+    const adjusted = await call<{ entry: { id: string } }>(
+      'recordWalletAdjustment',
+      { driverId: driver.id, orders: 5, reason: 'bonus', requestId: randomUUID() },
+      admin,
+    );
+    await call('voidWalletEntry', { entryId: adjusted.entry.id, reason: 'typo' }, admin);
+    // Ops re-open the cash delivery: its line leaves, and a note says what it gave back.
+    await call('editOrder', { id: cash, status: 2 }, w.staffUser);
+    const result = (await eventually(async () => {
+      const h = await history(driver);
+      return h.lines.some((l) => l.kind === 'orderChange') ? h : undefined;
+    }))!;
+
+    expect(result.hasWallet).toBe(true);
+    expect(result.next).toBeNull();
+    expect(result.lines.map((l) => [l.kind, l.units, l.counted, l.voided, l.balanceAfter])).toEqual(
+      [
+        ['orderChange', 100, false, false, 1400],
+        ['adjustment', 500, false, true, 1400],
+        ['refund', -100, true, false, 1400],
+        ['delivery', 300, true, false, 1500],
+        ['delivery', 200, true, false, 1200],
+        ['topup', 1000, true, false, 1000],
+      ],
+    );
+    const [note, , , cardLine, freeLine, topUpLine] = result.lines;
+    expect(note).toMatchObject({ orderId: cash, change: 'status' });
+    expect(cardLine).toMatchObject({ orderId: card, paidInCash: false, freeDelivery: false });
+    expect(freeLine).toMatchObject({ orderId: free, paidInCash: true, freeDelivery: true });
+    expect(topUpLine).toMatchObject({ method: 'cash', orderId: null });
+    // No price, amount, reference, staff name or note: the driver app never shows money.
+    for (const line of result.lines) expect(Object.keys(line).sort()).toEqual(LINE_KEYS);
+    expect(result.recent).toMatchObject({ deliveries: 2, used: 0, added: 1500 });
+    expect(await call('getMyWallet', {}, driver)).toMatchObject({
+      hasWallet: true,
+      ordersLeft: 14,
+    });
+  });
+
+  it('pages without repeating or skipping a line, even one gone since', async () => {
+    const driver = await newDriver();
+    await topUp(driver.id, 10);
+    for (let i = 0; i < 4; i++) await deliver(driver);
+    const first = await history(driver, { limit: 2 });
+    expect(first.recent).toMatchObject({ deliveries: 4, used: 400, added: 1000 });
+    expect(first.next).toBe(first.lines[1]!.cursor);
+    const second = await history(driver, { limit: 2, before: first.next });
+    expect(second.recent).toBeNull();
+    const third = await history(driver, { limit: 2, before: second.next });
+    expect(third.next).toBeNull();
+    const all = [...first.lines, ...second.lines, ...third.lines];
+    expect(all.map((l) => l.kind)).toEqual([
+      'delivery',
+      'delivery',
+      'delivery',
+      'delivery',
+      'topup',
+    ]);
+    expect(new Set(all.map((l) => l.id)).size).toBe(5);
+
+    // The last line held is canceled in the meantime: the next page starts from its time.
+    await api.update('Order', first.lines[1]!.id, { canceled: true });
+    const again = await history(driver, { limit: 2, before: first.next });
+    expect(again.lines.map((l) => l.id)).toEqual(second.lines.map((l) => l.id));
+  });
+
+  it('checks its params (102) and needs a session', async () => {
+    const driver = await newDriver();
+    for (const bad of [
+      { limit: 0 },
+      { limit: 101 },
+      { limit: 2.5 },
+      { before: 'nope' },
+      { before: 12 },
+    ]) {
+      const res = await api.fn('getMyWalletHistory', bad, driver.session);
+      expect(res.body, JSON.stringify(bad)).toEqual({ code: 102, error: 'WALLET_INVALID_PARAMS' });
+    }
+    expect((await api.fn('getMyWalletHistory', {})).body.code).toBeDefined();
   });
 });
 
@@ -511,7 +737,7 @@ describe('who may', () => {
     await topUp(driver.id, 1);
     const list = (who?: Session) => api.fn('listDriverWallets', {}, who?.session);
     expect((await list(member)).body.result).toMatchObject({
-      settings: { enforced: false },
+      config: { enforced: false, regions: {} },
       wallets: expect.arrayContaining([expect.objectContaining({ driverId: driver.id })]),
     });
     expect((await list(admin)).body.code).toBeUndefined();

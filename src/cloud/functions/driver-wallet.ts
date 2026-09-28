@@ -1,5 +1,6 @@
 // Not in legacy (D-25, ADR 0003): drivers' prepaid wallets. The driver app reads its own with
-// `getMyWallet` (orders only, never money); switch-finance runs the rest. Spec:
+// `getMyWallet` and `getMyWalletHistory` (orders only, never money); switch-finance runs the
+// rest. Spec:
 // switch-finance/docs/driver-wallet-backend.md.
 //
 // switch-finance reads the error code and message, so these throw Parse.Errors: 209 without a
@@ -10,6 +11,7 @@ import {
   ordersLeft,
   UNITS_PER_ORDER,
   valueOfOldest,
+  walletSettingsFor,
   walletState,
 } from '../../domain/driver-wallet.js';
 import { detach, type CloudDeps, type FunctionTable } from '../context.js';
@@ -22,13 +24,19 @@ import {
   walletBook,
   walletDrivers,
   walletLedger,
-  walletSettings,
+  walletConfig,
+  walletHistory,
   walletSummaries,
   walletUnits,
 } from '../wallet-book.js';
 
 /** The most orders one request may move: far above any real top-up, it only stops typos. */
 const MAX_ORDERS = 100_000;
+/** The driver's history: lines per page, by default and at most. */
+const HISTORY_PAGE = 30;
+const HISTORY_MAX = 100;
+/** A history line's cursor: its time in ms, then its id. */
+const CURSOR = /^\d{1,15}\.[A-Za-z0-9_-]{1,64}$/;
 /** How far back a wallet may start, when a manual balance is carried over. */
 const MAX_START_AGE_MS = 366 * 24 * 3600e3;
 /** The widest ledger range one call reads. */
@@ -102,8 +110,8 @@ function sameRequest(deps: CloudDeps, entry: WalletEntryDoc, driverId: string, k
 }
 
 async function freshSummary(deps: CloudDeps, driverId: string) {
-  const [settings, book] = await Promise.all([walletSettings(deps), walletBook(deps, driverId)]);
-  return book ? summaryOf(book, settings) : null;
+  const [config, book] = await Promise.all([walletConfig(deps), walletBook(deps, driverId)]);
+  return book ? summaryOf(book, config) : null;
 }
 
 function entryResult(entry: WalletEntryDoc) {
@@ -121,12 +129,19 @@ function entryResult(entry: WalletEntryDoc) {
 export const driverWalletFunctions: FunctionTable = {
   /**
    * The signed-in driver's wallet, in orders: no amount of money is ever sent to the app.
-   * `state` is `off` while the wallet isn't enforced, and the app then shows nothing.
+   * `state` is `off` while the wallet isn't enforced in their region, and the app then shows
+   * nothing. The rules are their region's, read from their current row.
    */
   async getMyWallet(req, deps) {
     const user = requireUser(req);
-    const settings = await walletSettings(deps);
-    const units = await walletUnits(deps, user.id!);
+    const [config, drivers, wallet] = await Promise.all([
+      walletConfig(deps),
+      walletDrivers(deps, [user.id!]),
+      deps.wallets.wallet(user.id!),
+    ]);
+    const driver = drivers.get(user.id!);
+    const settings = walletSettingsFor(config, driver?.cityId ?? null);
+    const units = wallet ? await walletUnits(deps, user.id!, driver) : 0;
     return {
       enforced: settings.enforced,
       state: walletState(units, settings),
@@ -134,13 +149,35 @@ export const driverWalletFunctions: FunctionTable = {
       canGoOnline: canGoOnline(units, settings),
       minOrders: settings.minOrders,
       lowOrders: settings.lowOrders,
+      // Finance has opened one (a first top-up): the app lists its history, enforced or not.
+      hasWallet: wallet !== null,
     };
   },
 
+  /**
+   * The signed-in driver's own history, newest first, in orders: top-ups, refunds, adjustments,
+   * deliveries and staff changes to a delivered order, with the orders left after each. Never an
+   * amount of money, a staff name or a note. Paged: `limit` lines (30 by default, at most 100)
+   * older than `before`, a line's `cursor`; `next` is the following page's `before`.
+   */
+  async getMyWalletHistory(req, deps) {
+    const user = requireUser(req);
+    const params = req.params as Record<string, unknown>;
+    const before = params.before ?? null;
+    if (before !== null && (typeof before !== 'string' || !CURSOR.test(before))) badParams(deps);
+    const limit = params.limit ?? HISTORY_PAGE;
+    if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > HISTORY_MAX)
+      badParams(deps);
+    const book = await walletBook(deps, user.id!);
+    if (!book) return { hasWallet: false, lines: [], next: null, recent: null };
+    return { hasWallet: true, ...(await walletHistory(deps, book, { before, limit })) };
+  },
+
+  /** Every wallet, and the rules: global, and each region's own values (`config.regions`). */
   async listDriverWallets(req, deps) {
     await requireFinance(req, deps);
-    const settings = await walletSettings(deps);
-    return { settings, wallets: await walletSummaries(deps, settings) };
+    const config = await walletConfig(deps);
+    return { config, wallets: await walletSummaries(deps, config) };
   },
 
   /** One wallet with its ledger for `[from, to]` (the last 30 days by default). */
@@ -151,13 +188,15 @@ export const driverWalletFunctions: FunctionTable = {
     const to = dateParam(deps, params.to) ?? deps.wallets.now();
     const from = dateParam(deps, params.from) ?? new Date(to.getTime() - 30 * DAY_MS);
     if (from > to || to.getTime() - from.getTime() > MAX_RANGE_MS) badParams(deps);
-    const settings = await walletSettings(deps);
+    const config = await walletConfig(deps);
     const book = await walletBook(deps, driverId);
     // Today's price is what a top-up would cost, wallet or not: the first one needs it too.
     const driver = book?.driver ?? (await walletDrivers(deps, [driverId])).get(driverId);
     const pricing = { unitPriceToday: driver?.fee ?? null, currency: driver?.currency ?? null };
+    // The rules this driver is held to: their region's where it sets any, else the global ones.
+    const settings = walletSettingsFor(config, driver?.cityId ?? null);
     if (!book) return { settings, pricing, ledger: null };
-    return { settings, pricing, ledger: await walletLedger(deps, settings, book, from, to) };
+    return { settings, pricing, ledger: await walletLedger(deps, config, book, from, to) };
   },
 
   /**

@@ -14,8 +14,9 @@ import {
   valueOfNewest,
   type WalletLevel,
   walletLevel,
-  type WalletSettings,
-  walletSettingsOf,
+  type WalletConfig,
+  walletConfigOf,
+  walletSettingsFor,
 } from '../domain/driver-wallet.js';
 import { languageOf } from '../domain/i18n.js';
 import { walletPushCopy, type WalletPushKind } from '../domain/wallet-messages.js';
@@ -30,9 +31,10 @@ import type {
 } from './driver-wallets.js';
 import { sendPush } from './notify.js';
 
-export async function walletSettings(deps: CloudDeps): Promise<WalletSettings> {
+/** Config `driverWallet`: the global rules and each region's own (`walletSettingsFor` merges). */
+export async function walletConfig(deps: CloudDeps): Promise<WalletConfig> {
   const config = await deps.Parse.Config.get();
-  return walletSettingsOf(config.get('driverWallet'));
+  return walletConfigOf(config.get('driverWallet'));
 }
 
 /** What the wallet needs to know about a driver's account. */
@@ -191,11 +193,14 @@ export interface WalletSummary {
   unitPriceToday: number | null;
   currency: string | null;
   level: WalletLevel;
+  /** Whether the rules for this driver's region hold them to it right now. */
+  enforced: boolean;
   lastTopUp: { at: string; orders: number; amount: number } | null;
 }
 
-export function summaryOf(book: WalletBook, settings: WalletSettings): WalletSummary {
+export function summaryOf(book: WalletBook, config: WalletConfig): WalletSummary {
   const fee = book.driver?.fee ?? null;
+  const settings = walletSettingsFor(config, book.driver?.cityId ?? null);
   const lastTopUp = book.entries.find((e) => e.kind === 'topup' && e.voided === null);
   return {
     driverId: book.wallet._id,
@@ -207,6 +212,7 @@ export function summaryOf(book: WalletBook, settings: WalletSettings): WalletSum
     unitPriceToday: fee,
     currency: book.driver?.currency ?? null,
     level: walletLevel(book.units, settings),
+    enforced: settings.enforced,
     lastTopUp: lastTopUp
       ? {
           at: lastTopUp.at.toISOString(),
@@ -219,7 +225,7 @@ export function summaryOf(book: WalletBook, settings: WalletSettings): WalletSum
 
 export async function walletSummaries(
   deps: CloudDeps,
-  settings: WalletSettings,
+  config: WalletConfig,
 ): Promise<WalletSummary[]> {
   const wallets = await deps.wallets.wallets();
   const drivers = await walletDrivers(
@@ -227,7 +233,7 @@ export async function walletSummaries(
     wallets.map((w) => w._id),
   );
   const books = await booksFor(deps, wallets, drivers);
-  return books.map((book) => summaryOf(book, settings));
+  return books.map((book) => summaryOf(book, config));
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -285,20 +291,19 @@ export interface WalletLedger {
 
 export const LEDGER_LINE_LIMIT = 3000;
 
-type Event =
-  | { at: Date; units: number; entry: WalletEntryDoc }
-  | { at: Date; units: number; row: OrderUnitRow };
+/** A movement of a wallet, with the balance (hundredths) right after it. */
+type Walked =
+  | { at: Date; balanceAfter: number; entry: WalletEntryDoc }
+  | { at: Date; balanceAfter: number; row: OrderUnitRow };
 
-/** A wallet's movements in `[from, to]` with the balance after each, and the range's totals. */
-export async function walletLedger(
-  deps: CloudDeps,
-  settings: WalletSettings,
-  book: WalletBook,
-  from: Date,
-  to: Date,
-): Promise<WalletLedger> {
+/**
+ * Every movement of a wallet, oldest first, with the balance after each: its entries and its
+ * driver's counted orders, walked once. The one running balance behind finance's ledger and the
+ * driver's history.
+ */
+async function walkBook(deps: CloudDeps, book: WalletBook): Promise<Walked[]> {
   const rows = await deps.wallets.orderRows([windowOf(book.wallet, book.driver)]);
-  const events: Event[] = [
+  const events = [
     ...book.entries.map((entry) => ({
       at: entry.at,
       units: counts(entry) ? entry.units : 0,
@@ -306,8 +311,23 @@ export async function walletLedger(
     })),
     ...rows.map((row) => ({ at: row.at, units: row.change, row })),
   ].sort((a, b) => a.at.getTime() - b.at.getTime());
-
   let balance = 0;
+  return events.map(({ units, ...event }) => {
+    balance += units;
+    return { ...event, balanceAfter: balance };
+  });
+}
+
+/** A wallet's movements in `[from, to]` with the balance after each, and the range's totals. */
+export async function walletLedger(
+  deps: CloudDeps,
+  config: WalletConfig,
+  book: WalletBook,
+  from: Date,
+  to: Date,
+): Promise<WalletLedger> {
+  const events = await walkBook(deps, book);
+
   let opening = 0;
   const range = {
     used: 0,
@@ -318,7 +338,7 @@ export async function walletLedger(
   };
   const lines: LedgerLine[] = [];
   for (const event of events) {
-    balance += event.units;
+    const balance = event.balanceAfter;
     if (event.at < from) {
       opening = balance;
       continue;
@@ -372,7 +392,7 @@ export async function walletLedger(
   const closing = lines.length ? lines[lines.length - 1]!.balanceAfter : opening;
   lines.reverse();
   return {
-    summary: summaryOf(book, settings),
+    summary: summaryOf(book, config),
     range: {
       from: from.toISOString(),
       to: to.toISOString(),
@@ -382,6 +402,142 @@ export async function walletLedger(
     },
     lines: lines.slice(0, LEDGER_LINE_LIMIT),
     truncated: lines.length > LEDGER_LINE_LIMIT,
+  };
+}
+
+// ---------------------------------------------------------------------------------------------
+// The driver's own history
+
+/**
+ * One movement as the driver app shows it: orders only. No price, amount, reference, staff name
+ * or staff note — the driver app never shows money, and notes are written for finance.
+ */
+export interface MyWalletLine {
+  /** Where the next page starts when this is the last line held (`before`). */
+  cursor: string;
+  id: string;
+  kind: 'topup' | 'refund' | 'adjustment' | 'delivery' | 'orderChange';
+  at: string;
+  /**
+   * Hundredths of an order, + added, − used. A voided entry keeps what it moved; an
+   * `orderChange` carries what the change gave back (+) or took (−), already in the balance
+   * through the order itself.
+   */
+  units: number;
+  /** Whether `units` is in the balance: false for a voided entry and for an `orderChange`. */
+  counted: boolean;
+  voided: boolean;
+  /** The balance right after it, hundredths. */
+  balanceAfter: number;
+  /** Top-ups: how the driver paid. */
+  method: WalletEntryDoc['method'];
+  /** Deliveries and order changes. */
+  orderId: string | null;
+  /** Deliveries: what decided what the order did. */
+  freeDelivery: boolean;
+  paidInCash: boolean | null;
+  /** Order changes: what staff changed on the order. */
+  change: OrderChangeKind | null;
+}
+
+export interface MyWalletHistory {
+  lines: MyWalletLine[];
+  /** The `before` of the next page, or null on the last one. */
+  next: string | null;
+  /** The last `RECENT_DAYS`, in hundredths: first page only. */
+  recent: { since: string; deliveries: number; used: number; added: number } | null;
+}
+
+export const RECENT_DAYS = 30;
+const cursorOf = (at: Date, id: string) => `${at.getTime()}.${id}`;
+
+function myLine(event: Walked): MyWalletLine | null {
+  if ('row' in event) {
+    const { row } = event;
+    return {
+      cursor: cursorOf(row.at, row.orderId),
+      id: row.orderId,
+      kind: 'delivery',
+      at: row.at.toISOString(),
+      units: row.change,
+      counted: true,
+      voided: false,
+      balanceAfter: event.balanceAfter,
+      method: null,
+      orderId: row.orderId,
+      freeDelivery: row.freeDelivery,
+      paidInCash: row.money.paymentMethod === 'cash',
+      change: null,
+    };
+  }
+  const { entry } = event;
+  const note = entry.kind === 'orderChange';
+  // A note whose change moved nothing (a fee edit that left the charge alone) says nothing.
+  if (note && !entry.order?.effect) return null;
+  return {
+    cursor: cursorOf(entry.at, entry._id),
+    id: entry._id,
+    kind: entry.kind,
+    at: entry.at.toISOString(),
+    units: note ? entry.order!.effect : entry.units,
+    counted: counts(entry),
+    voided: entry.voided !== null,
+    balanceAfter: event.balanceAfter,
+    method: entry.method,
+    orderId: entry.order?.id ?? null,
+    freeDelivery: false,
+    paidInCash: null,
+    change: entry.order?.change ?? null,
+  };
+}
+
+/**
+ * A page of the driver's own history, newest first: `limit` lines older than the line whose
+ * cursor is `before` (from the newest without it). A line gone since (an order ops canceled)
+ * leaves the page to start from its time instead.
+ */
+export async function walletHistory(
+  deps: CloudDeps,
+  book: WalletBook,
+  opts: { before: string | null; limit: number },
+): Promise<MyWalletHistory> {
+  const events = await walkBook(deps, book);
+  const lines: MyWalletLine[] = [];
+  for (let i = events.length - 1; i >= 0; i--) {
+    const line = myLine(events[i]!);
+    if (line) lines.push(line);
+  }
+
+  let start = 0;
+  if (opts.before) {
+    const held = lines.findIndex((line) => line.cursor === opts.before);
+    if (held >= 0) start = held + 1;
+    else {
+      const at = Number(opts.before.slice(0, opts.before.indexOf('.')));
+      start = lines.findIndex((line) => Date.parse(line.at) < at);
+      if (start < 0) start = lines.length;
+    }
+  }
+  const page = lines.slice(start, start + opts.limit);
+  const more = start + page.length < lines.length;
+
+  let recent: MyWalletHistory['recent'] = null;
+  if (!opts.before) {
+    const since = new Date(deps.wallets.now().getTime() - RECENT_DAYS * 24 * 3600e3);
+    recent = { since: since.toISOString(), deliveries: 0, used: 0, added: 0 };
+    for (const line of lines) {
+      if (Date.parse(line.at) < since.getTime()) break;
+      if (line.kind === 'delivery') {
+        recent.deliveries += 1;
+        if (line.units < 0) recent.used -= line.units;
+      }
+      if (line.counted && line.units > 0) recent.added += line.units;
+    }
+  }
+  return {
+    lines: page,
+    next: more && page.length > 0 ? page[page.length - 1]!.cursor : null,
+    recent,
   };
 }
 
@@ -427,12 +583,13 @@ export async function afterWalletChange(
 ): Promise<void> {
   const wallet = await deps.wallets.wallet(driverId);
   if (!wallet) return;
-  const [settings, drivers] = await Promise.all([
-    walletSettings(deps),
+  const [config, drivers] = await Promise.all([
+    walletConfig(deps),
     walletDrivers(deps, [driverId]),
   ]);
   const driver = drivers.get(driverId);
   if (!driver) return;
+  const settings = walletSettingsFor(config, driver.cityId);
   const units = await walletUnits(deps, driverId, driver);
   const level = walletLevel(units, settings);
   const left = ordersLeft(units);

@@ -8,30 +8,76 @@ import {
   serviceFeeOf,
   valueOfNewest,
   valueOfOldest,
+  walletConfigOf,
   walletLevel,
-  walletSettingsOf,
+  walletSettingsFor,
   walletState,
 } from '../../src/domain/driver-wallet.js';
 import { arabicOrders, walletPushCopy } from '../../src/domain/wallet-messages.js';
 
 const at = (day: number) => new Date(Date.UTC(2026, 8, day));
 
-describe('walletSettingsOf', () => {
-  it('defaults to off, at least 1 order to go online, a warning at 10', () => {
-    expect(walletSettingsOf(undefined)).toEqual({ enforced: false, minOrders: 1, lowOrders: 10 });
+describe('wallet config', () => {
+  it('defaults to off, at least 1 order to go online, a warning at 10, no region of its own', () => {
+    expect(walletConfigOf(undefined)).toEqual({
+      enforced: false,
+      minOrders: 1,
+      lowOrders: 10,
+      regions: {},
+    });
   });
 
-  it('keeps whole numbers and replaces anything else by its default', () => {
-    expect(walletSettingsOf({ enforced: true, minOrders: 3, lowOrders: 15 })).toEqual({
+  it('keeps well-formed values and replaces anything else by its default', () => {
+    expect(walletConfigOf({ enforced: true, minOrders: 3, lowOrders: 15 })).toMatchObject({
       enforced: true,
       minOrders: 3,
       lowOrders: 15,
     });
-    expect(walletSettingsOf({ enforced: 'yes', minOrders: -1, lowOrders: 2.5 })).toEqual({
+    expect(walletConfigOf({ enforced: 'yes', minOrders: -1, lowOrders: 2.5 })).toMatchObject({
       enforced: false,
       minOrders: 1,
       lowOrders: 10,
     });
+  });
+
+  it('keeps only the values a region sets, and drops a region that sets none', () => {
+    const config = walletConfigOf({
+      regions: {
+        alger: { enforced: true, lowOrders: 5 },
+        oran: { enforced: 'no', minOrders: -2 },
+        setif: 'nonsense',
+      },
+    });
+    expect(config.regions).toEqual({ alger: { enforced: true, lowOrders: 5 } });
+  });
+
+  it('holds a driver to their region’s values, the global ones for the rest', () => {
+    const config = walletConfigOf({
+      enforced: true,
+      minOrders: 2,
+      lowOrders: 10,
+      regions: { alger: { lowOrders: 5 }, setif: { enforced: false } },
+    });
+    expect(walletSettingsFor(config, 'alger')).toEqual({
+      enforced: true,
+      minOrders: 2,
+      lowOrders: 5,
+    });
+    expect(walletSettingsFor(config, 'setif')).toMatchObject({ enforced: false });
+    expect(walletSettingsFor(config, 'oran')).toEqual({
+      enforced: true,
+      minOrders: 2,
+      lowOrders: 10,
+    });
+    expect(walletSettingsFor(config, null)).toEqual({
+      enforced: true,
+      minOrders: 2,
+      lowOrders: 10,
+    });
+    // The global switch is a master switch: off, no region is enforced, whatever it says.
+    const off = walletConfigOf({ enforced: false, regions: { alger: { enforced: true } } });
+    expect(walletSettingsFor(off, 'alger').enforced).toBe(false);
+    expect(walletSettingsFor(off, 'oran').enforced).toBe(false);
   });
 });
 
