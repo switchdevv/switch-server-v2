@@ -17,3 +17,11 @@ savePrefix: ''
 overrides:
   ws@<8.21.0: 8.21.3 # via parse (LiveQuery client, unused)
   ip-address@<10.3.1: 10.7.2 # via express-rate-limit (rateLimit not configured)
+# Advisories with no patched release yet. Replace each with an override above once one ships.
+auditConfig:
+  ignoreGhsas:
+    # node-forge <=1.4.0 RSA signature verification (no 1.4.1 on npm as of 2026-10-02). Reached
+    # via parse-server's push adapter (not configured: push goes through src/adapters/real.ts)
+    # and firebase-admin, which only signs FCM requests with our own key and never verifies
+    # third-party signatures.
+    - GHSA-86w9-cpqp-85rv
