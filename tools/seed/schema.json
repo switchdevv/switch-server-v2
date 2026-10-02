@@ -1,5 +1,5 @@
 {
-  "//": "Prod schema for local dev: switch-server/_SCHEMA.json (2023) + opsAccess/financeAccess, Order call marks, DispatchQueue (as set in the Parse Dashboard). Local only.",
+  "//": "Prod schema for local dev: switch-server/_SCHEMA.json (2023, types and column defaults) + opsAccess/financeAccess, Order call marks, DispatchQueue (as set in the Parse Dashboard). Local only.",
   "classes": [
     {
       "className": "Category",
@@ -89,7 +89,8 @@
           "targetClass": "_User"
         },
         "status": {
-          "type": "Number"
+          "type": "Number",
+          "defaultValue": 0
         },
         "options": {
           "type": "Object"
@@ -98,7 +99,8 @@
           "type": "Array"
         },
         "isReady": {
-          "type": "Boolean"
+          "type": "Boolean",
+          "defaultValue": false
         },
         "distance": {
           "type": "Number"
@@ -121,7 +123,8 @@
           "targetClass": "Restaurant"
         },
         "canceled": {
-          "type": "Boolean"
+          "type": "Boolean",
+          "defaultValue": false
         },
         "userAddress": {
           "type": "Pointer",
@@ -136,7 +139,8 @@
           "targetClass": "City"
         },
         "driverRated": {
-          "type": "Boolean"
+          "type": "Boolean",
+          "defaultValue": false
         },
         "opsCustomerCall": {
           "type": "Object"
@@ -237,41 +241,50 @@
           "type": "GeoPoint"
         },
         "isPromo": {
-          "type": "Boolean"
+          "type": "Boolean",
+          "defaultValue": false
         },
         "rating": {
-          "type": "Number"
+          "type": "Number",
+          "defaultValue": 0
         },
         "reviews": {
-          "type": "Number"
+          "type": "Number",
+          "defaultValue": 0
         },
         "phone": {
           "type": "String"
         },
         "active": {
-          "type": "Boolean"
+          "type": "Boolean",
+          "defaultValue": true
         },
         "address": {
           "type": "String"
         },
         "ratingTotal": {
-          "type": "Number"
+          "type": "Number",
+          "defaultValue": 0
         },
         "ordersTotal": {
-          "type": "Number"
+          "type": "Number",
+          "defaultValue": 0
         },
         "ordersAccepted": {
-          "type": "Number"
+          "type": "Number",
+          "defaultValue": 0
         },
         "city": {
           "type": "Pointer",
           "targetClass": "City"
         },
         "categories": {
-          "type": "Array"
+          "type": "Array",
+          "defaultValue": []
         },
         "enabled": {
-          "type": "Boolean"
+          "type": "Boolean",
+          "defaultValue": false
         },
         "fee": {
           "type": "Number"
@@ -299,10 +312,12 @@
           "type": "String"
         },
         "isDiscount": {
-          "type": "Boolean"
+          "type": "Boolean",
+          "defaultValue": false
         },
         "isFeatured": {
-          "type": "Boolean"
+          "type": "Boolean",
+          "defaultValue": false
         }
       },
       "classLevelPermissions": {
@@ -405,10 +420,12 @@
           "targetClass": "City"
         },
         "discountPrice": {
-          "type": "Number"
+          "type": "Number",
+          "defaultValue": 0
         },
         "enabled": {
-          "type": "Boolean"
+          "type": "Boolean",
+          "defaultValue": true
         },
         "list": {
           "type": "Pointer",
@@ -418,7 +435,8 @@
           "type": "Array"
         },
         "isDiscount": {
-          "type": "Boolean"
+          "type": "Boolean",
+          "defaultValue": false
         }
       },
       "classLevelPermissions": {
@@ -761,16 +779,20 @@
           "type": "String"
         },
         "cartFood": {
-          "type": "Array"
+          "type": "Array",
+          "defaultValue": []
         },
         "cartOptions": {
-          "type": "Object"
+          "type": "Object",
+          "defaultValue": {}
         },
         "favorites": {
-          "type": "Array"
+          "type": "Array",
+          "defaultValue": []
         },
         "promosUsed": {
-          "type": "Array"
+          "type": "Array",
+          "defaultValue": []
         },
         "payment": {
           "type": "Object"
@@ -780,25 +802,31 @@
           "targetClass": "Address"
         },
         "driverActive": {
-          "type": "Boolean"
+          "type": "Boolean",
+          "defaultValue": false
         },
         "pushToken": {
-          "type": "Object"
+          "type": "Object",
+          "defaultValue": {}
         },
         "appType": {
-          "type": "Array"
+          "type": "Array",
+          "defaultValue": []
         },
         "driverLocation": {
           "type": "GeoPoint"
         },
         "driverRating": {
-          "type": "Number"
+          "type": "Number",
+          "defaultValue": 0
         },
         "promoNotifs": {
-          "type": "Boolean"
+          "type": "Boolean",
+          "defaultValue": true
         },
         "driverOrdersAccepted": {
-          "type": "Number"
+          "type": "Number",
+          "defaultValue": 0
         },
         "staffType": {
           "type": "String"
@@ -818,7 +846,8 @@
           "targetClass": "City"
         },
         "tmpUser": {
-          "type": "Boolean"
+          "type": "Boolean",
+          "defaultValue": false
         },
         "opsAccess": {
           "type": "Boolean"
@@ -929,7 +958,8 @@
           "targetClass": "Restaurant"
         },
         "enabled": {
-          "type": "Boolean"
+          "type": "Boolean",
+          "defaultValue": true
         }
       },
       "classLevelPermissions": {

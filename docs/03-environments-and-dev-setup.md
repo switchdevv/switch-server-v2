@@ -274,10 +274,10 @@ Set up and operated by [06-production.md](06-production.md) (step by step). In s
 - **Where:** switch-proj's App Engine app, service `default`, as `v2-…` versions next to legacy's
   nodejs14 version. `api.switchfood.net` keeps its DNS and domain mapping; the switch from legacy
   is a traffic move inside the service, and so is a rollback.
-- **`app.yaml`:** `nodejs24`, F2 (OD-8), warmup requests, and `min_instances: 0` +
-  `min_idle_instances: 1`. Only the version with most of the traffic keeps an idle instance, so a
-  version deployed without traffic, or kept for rollback, doesn't run a dispatch worker against
-  the production database. Legacy's `min_instances: 1` would.
+- **`app.yaml`:** `nodejs24`, F1 (OD-8 chose F2; downgraded 2026-09-28), warmup requests, and
+  `min_instances: 1` like legacy, inside the 28 free instance-hours a day (`min_idle_instances: 1`
+  kept ~2 instances, ~$28 a month). Every deployed version keeps that instance, so
+  promote-production deletes every other v2 version after a move to 100%.
 - **Build happens in CI, not on App Engine.** CI runs the full pipeline, produces `dist/`, then
   `gcloud app deploy --no-promote`. `package.json` sets `"gcp-build": ""`, so the buildpack does
   not run `build` itself (per Google's buildpack docs, a `gcp-build` script replaces the default

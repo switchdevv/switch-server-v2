@@ -304,6 +304,21 @@ Every account (`admin`, `ops`, `manager.roma`, `driver.sara`, `customer`, …) g
 the seed prints the list. It refuses a password under 12 characters, and does nothing on a database
 that already has users.
 
+### A database seeded before the column defaults
+
+`tools/seed/schema.json` carries production's column defaults (`Restaurant.rating = 0`,
+`Food.enabled = true`, …). A staging database seeded before they were added has none, so rows made
+later lack those columns (a restaurant created in ops has no `rating`, and the food app's home fails
+on it). The seed leaves an existing database alone; this adds the defaults and fills the rows that
+lack them:
+
+```bash
+pnpm staging:defaults              # dry run: what it would change
+pnpm staging:defaults -- --apply
+```
+
+It only runs on `switch_staging`, and the server picks the defaults up without a redeploy.
+
 ### Check the master key is closed
 
 Staging accepts the master key only from the server itself (`MASTER_KEY_IPS=127.0.0.1,::1`). On

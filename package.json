@@ -17,6 +17,7 @@
     "seed": "tsx tools/seed/index.ts",
     "db:reset": "tsx tools/seed/index.ts --reset",
     "seed:staging": "tsx tools/seed/staging.ts",
+    "staging:defaults": "tsx tools/seed/staging-defaults.ts",
     "staging:secret": "tsx tools/secret.ts staging",
     "staging:preflight": "node tools/deploy/staging-preflight.ts",
     "production:secret": "tsx tools/secret.ts production",

@@ -6,8 +6,10 @@
 #   by client IP so each phone or office stays on one version.
 #
 # The version is woken up and must answer /health before it gets any traffic. After a move to 100%,
-# old v2 versions without traffic are deleted (the newest 3 are kept); legacy's version, whatever
-# its runtime, is never touched here. docs/06-production.md.
+# every other v2 version is deleted: app.yaml's min_instances: 1 keeps an instance on each deployed
+# version, so a kept one would bill around the clock. A release that needs an instant way back goes
+# through 10% / 50% first, while the previous version still serves the rest. Legacy's version,
+# whatever its runtime, is never touched here. docs/06-production.md.
 name: promote-production
 
 on:
@@ -48,7 +50,7 @@ jobs:
       DEPLOY_SA: ${{ vars.PROD_GCP_DEPLOY_SA }}
       VERSION: ${{ inputs.version }}
       PERCENT: ${{ inputs.percent }}
-      KEEP_VERSIONS: 3
+      KEEP_VERSIONS: 0 # app.yaml min_instances: each kept version bills one instance
     steps:
       - name: Check the branch, the inputs and the repository variables
         run: |
@@ -165,7 +167,8 @@ jobs:
             echo "::error::$VERSION has ${got:-no} share, not $PERCENT%. Check: gcloud app services describe default --project=$PROJECT_ID"
             exit 1
           fi
-      - name: Delete old v2 versions (keeps the newest ${{ env.KEEP_VERSIONS }}, never legacy)
+      - name: Delete old v2 versions (keeps ${{ env.KEEP_VERSIONS }} without traffic, never legacy)
+        id: cleanup
         if: inputs.percent == '100'
         continue-on-error: true # production is already on the new version
         run: |
@@ -178,6 +181,7 @@ jobs:
           if [ -s "$RUNNER_TEMP/old" ]; then
             xargs gcloud app versions delete --service=default --project="$PROJECT_ID" --quiet \
               < "$RUNNER_TEMP/old"
+            echo "deleted=$(tr '\n' ' ' < "$RUNNER_TEMP/old")" >> "$GITHUB_OUTPUT"
           else
             echo "Nothing to delete."
           fi
@@ -188,6 +192,7 @@ jobs:
           BEFORE: ${{ steps.before.outputs.serving }}
           AFTER: ${{ steps.after.outputs.serving }}
           CURRENT: ${{ steps.before.outputs.current }}
+          DELETED: ${{ steps.cleanup.outputs.deleted }}
         run: |
           {
             echo "### Production traffic: $STATUS"
@@ -198,8 +203,11 @@ jobs:
             echo "| Before | \`${BEFORE:-n/a}\` |"
             echo "| After | \`${AFTER:-unchanged}\` |"
             echo
-            if [ -n "$CURRENT" ]; then
+            if [ -n "$CURRENT" ] && [[ " $DELETED " != *" $CURRENT "* ]]; then
               echo "Roll back: run promote-production again with version \`$CURRENT\` at 100%, or"
               echo "\`gcloud app services set-traffic default --splits=$CURRENT=1 --project=$PROJECT_ID\`"
+            elif [ -n "$CURRENT" ]; then
+              echo "\`$CURRENT\` was deleted (min_instances: 1 would bill it around the clock). Roll back:"
+              echo "revert on \`main\`, run deploy-production, then promote-production at 100%."
             fi
           } >> "$GITHUB_STEP_SUMMARY"

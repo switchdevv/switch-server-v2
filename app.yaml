@@ -2,7 +2,7 @@
 # --no-promote only (.github/workflows/deploy-production.yml); traffic moves are the manual promote
 # workflow (docs/06-production.md). The rest of the config is .env.prod.
 runtime: nodejs24
-# OD-8: F2 (768 MB). Production instances run at 270–335 MB (2026-09-28), too close to F1's 384 MB.
+# F1 (384 MB) since 2026-09-28; production instances run at 210–335 MB, so watch the memory chart.
 instance_class: F1
 entrypoint: node --enable-source-maps dist/main.js
 inbound_services:
@@ -10,12 +10,7 @@ inbound_services:
 env_variables:
   APP_ENV: production
 automatic_scaling:
-  # Legacy has min_instances: 1. Here the floor is an idle instance instead, which App Engine only
-  # keeps for the version with most of the traffic. min_instances would keep an instance, and its
-  # dispatch worker, on every version deployed without traffic or kept for rollback, running
-  # unreleased or old code against the production database.
-  min_instances: 0
-  min_idle_instances: 1
+  min_instances: 1
   max_instances: 5
   target_cpu_utilization: 0.9
   max_concurrent_requests: 70

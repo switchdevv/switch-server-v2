@@ -58,7 +58,7 @@ flowchart LR
   R["You: Run workflow<br/>deploy-production (main)"] --> CI["ci: typecheck · lint · format · tests · build · audit · gitleaks"]
   CI --> PF[preflight: .env.prod matches<br/>the project serving the domain] --> D["deploy dist/ as v2-N<br/>no traffic"] --> H["/health on v2-N's own URL"]
   H -. you decide .-> P["You: Run workflow<br/>promote-production (v2-N, 100 or 10)"]
-  P --> W["wake v2-N, /health"] --> T[move the traffic] --> K[delete old v2 versions,<br/>keep the newest 3]
+  P --> W["wake v2-N, /health"] --> T[move the traffic] --> K[delete every other<br/>v2 version]
 ```
 
 - `.github/workflows/deploy-production.yml` runs the same checks as every pull request, then
@@ -77,7 +77,7 @@ flowchart LR
 
 | Service | Production | Shared with legacy? |
 |---|---|---|
-| Hosting | App Engine, project `switch-proj`, service `default`, F2, 0–5 instances | same app and service, different versions |
+| Hosting | App Engine, project `switch-proj`, service `default`, F1, 1–5 instances | same app and service, different versions |
 | Database | production MongoDB Atlas cluster, database `switchDB` | **yes**, the same data |
 | Push | Firebase project `switch-proj` (the apps' own) | yes |
 | Realtime | the production Pusher app (key `337b658e660ec3f09bd3`) | yes |
@@ -532,9 +532,9 @@ Within the following weeks:
 
 | Situation | Do | Takes |
 |---|---|---|
-| A new v2 release misbehaves | promote-production with the **previous v2 version** at `100` (its id is in the last promote run's summary, "Roll back") | seconds |
+| A new v2 release misbehaves during its 10% / 50% canary | promote-production with the version that had the rest, at `100` | seconds |
+| A new v2 release misbehaves at 100% | the previous v2 version was deleted at the move (Part D, "Scaling"): revert on `main`, deploy-production, promote at `100` | minutes |
 | v2 itself misbehaves after the switch, legacy still deployed | promote-production with **`$LEGACY_VERSION`** at `100` | seconds |
-| Legacy already deleted | promote a previous v2 version, or deploy a fix and promote it | minutes |
 | A canary (10%/50%) looks wrong | promote-production with the version that had the rest, at `100` | seconds |
 
 Break-glass, when GitHub is down (an operator account with App Engine Admin):
@@ -552,8 +552,7 @@ After a rollback to legacy (20240210t122703):
   on legacy.
 - If v2's dispatch worker was on, its instances stop once they are idle. Any job a v2 instance had
   locked is picked up by legacy after the 10-minute lock.
-- Keep the v2 version for the investigation (the promote run deletes only v2 versions beyond the
-  newest 3). Its logs stay in Logs Explorer.
+- The v2 version is deleted by the next promote to 100%, but its logs stay in Logs Explorer.
 
 ---
 
@@ -568,7 +567,7 @@ After a rollback to legacy (20240210t122703):
 | Change a setting | Edit `.env.prod` (or `app.yaml` for scaling), same flow. `pnpm production:preflight --project switch-proj` checks it. |
 | Logs | `gcloud app logs tail --service=default --project=switch-proj`, or Logs Explorer: `resource.type="gae_app" AND resource.labels.version_id="<version>"`. |
 | A deploy that must not go out | Don't promote it. Delete it: `gcloud app versions delete <version> --service=default --project=switch-proj`. |
-| Scaling | `app.yaml`. Only the version with most of the traffic keeps an idle instance (`min_idle_instances: 1`); versions without traffic scale to zero. `min_instances` would keep an instance, with a dispatch worker, on every old version. |
+| Scaling | `app.yaml`: `min_instances: 1`, one always-on F1 instance, inside App Engine's 28 free instance-hours a day (the earlier `min_idle_instances: 1` kept ~2 instances, ~$28 a month). `min_instances` holds on **every** deployed version, so promote-production deletes every other v2 version after a move to 100%, and a deploy that is never promoted bills until it is deleted. For an instant way back, promote at `10` / `50` first: the previous version keeps serving the rest. |
 
 A change that also needs a client change ships on the server first (staging, then production), then
 the client. switch-ops, switch-finance and switch-admin each have a `docs/production.md` with
